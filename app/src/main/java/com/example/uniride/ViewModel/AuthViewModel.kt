@@ -1,84 +1,119 @@
 package com.example.uniride.ViewModel
 
+import android.app.Application
+import android.content.Context
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.uniride.Service.AuthService
-import com.example.uniride.Service.UsuarioService
+import com.example.uniride.interfaces.RetrofitClient
+import com.example.uniride.model.dto.LoginRequest
 import com.example.uniride.model.dto.LoginResponse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class AuthViewModel : ViewModel() {
+class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val authService    = AuthService()
-    private val usuarioService = UsuarioService()
+    private val prefs = application.getSharedPreferences("uniride_session", Context.MODE_PRIVATE)
 
-    private val _loginResult = MutableLiveData<LoginResponse?>(null)
+    private val _loginResult = MutableLiveData<LoginResponse?>()
     val loginResult: MutableLiveData<LoginResponse?> = _loginResult
 
-    private val _mensaje = MutableLiveData<String?>(null)
-    val mensaje: MutableLiveData<String?> = _mensaje
+    private val _loginError = MutableLiveData<String?>()
+    val loginError: MutableLiveData<String?> = _loginError
 
-    private val _cargando = MutableLiveData(false)
-    val cargando: MutableLiveData<Boolean> = _cargando
-
-    var sesionActual: LoginResponse? = null
+    // Carga sesión desde SharedPreferences al arrancar
+    var sesionActual: LoginResponse? = cargarSesionGuardada()
         private set
+
+    private fun cargarSesionGuardada(): LoginResponse? {
+        val id = prefs.getLong("idUsuario", -1L)
+        if (id == -1L) return null
+        return LoginResponse(
+            mensaje    = "ok",
+            rol        = prefs.getString("rol", "pasajero") ?: "pasajero",
+            idUsuario  = id,
+            nombre     = prefs.getString("nombre", "") ?: "",
+            fotoPerfil = prefs.getString("fotoPerfil", null)
+        )
+    }
+
+    private fun guardarSesion(sesion: LoginResponse) {
+        prefs.edit()
+            .putLong("idUsuario",  sesion.idUsuario)
+            .putString("rol",      sesion.rol)
+            .putString("nombre",   sesion.nombre)
+            .putString("fotoPerfil", sesion.fotoPerfil)
+            .apply()
+    }
+
+    private fun limpiarSesion() {
+        prefs.edit().clear().apply()
+    }
 
     fun login(correo: String, contrasena: String) {
         viewModelScope.launch {
-            _cargando.postValue(true)
             try {
                 val response = withContext(Dispatchers.IO) {
-                    authService.login(correo, contrasena)
+                    RetrofitClient.apiService.login(LoginRequest(correo, contrasena))
                 }
                 if (response.isSuccessful) {
-                    sesionActual = response.body()
-                    _loginResult.postValue(response.body())
+                    val body = response.body()!!
+                    // Obtener datos completos del usuario para tener fotoPerfil y rol actualizado
+                    try {
+                        val usuario = withContext(Dispatchers.IO) {
+                            RetrofitClient.apiService.obtenerUsuario(body.idUsuario)
+                        }
+                        val sesionCompleta = LoginResponse(
+                            mensaje    = body.mensaje,
+                            rol        = usuario.rol,
+                            idUsuario  = body.idUsuario,
+                            nombre     = usuario.nombre,
+                            fotoPerfil = usuario.fotoPerfil
+                        )
+                        sesionActual = sesionCompleta
+                        guardarSesion(sesionCompleta)
+                        _loginResult.postValue(sesionCompleta)
+                    } catch (e: Exception) {
+                        sesionActual = body
+                        guardarSesion(body)
+                        _loginResult.postValue(body)
+                    }
                 } else {
-                    _mensaje.postValue("Correo o contraseña incorrectos.")
+                    _loginError.postValue("Correo o contraseña incorrectos")
                 }
             } catch (e: Exception) {
-                _mensaje.postValue("Sin conexión. Verifica tu internet.")
+                _loginError.postValue("Error de conexión: ${e.message}")
             }
-            _cargando.postValue(false)
         }
     }
 
-    fun registrar(
-        nombre: String,
-        correo: String,
-        contrasena: String,
-        telefono: String,
-        rol: String,
-        onExito: () -> Unit
-    ) {
-        viewModelScope.launch {
-            _cargando.postValue(true)
-            try {
-                withContext(Dispatchers.IO) {
-                    usuarioService.crearUsuario(nombre, correo, contrasena, telefono, rol)
-                }
-                _mensaje.postValue("Registro exitoso. Ahora inicia sesión.")
-                onExito()
-            } catch (e: Exception) {
-                _mensaje.postValue("Error al registrar: ${e.message}")
-            }
-            _cargando.postValue(false)
-        }
+    // Actualiza la sesión en memoria Y en SharedPreferences
+    fun actualizarSesion(nueva: LoginResponse) {
+        sesionActual = nueva
+        guardarSesion(nueva)
+        _loginResult.postValue(nueva)
+    }
+
+    // Actualiza solo el rol en sesión y SharedPreferences
+    fun actualizarRol(nuevoRol: String) {
+        val actual = sesionActual ?: return
+        val nueva = actual.copy(rol = nuevoRol)
+        actualizarSesion(nueva)
+    }
+
+    // Actualiza foto de perfil en sesión
+    fun actualizarFoto(url: String?) {
+        val actual = sesionActual ?: return
+        val nueva = actual.copy(fotoPerfil = url)
+        actualizarSesion(nueva)
     }
 
     fun cerrarSesion() {
         sesionActual = null
+        limpiarSesion()
         _loginResult.postValue(null)
     }
 
-    fun limpiarMensaje() { _mensaje.postValue(null) }
-
-    fun actualizarSesion(nuevaSesion: LoginResponse) {
-        sesionActual = nuevaSesion
-        _loginResult.postValue(nuevaSesion)
-    }
+    fun limpiarError() { _loginError.postValue(null) }
 }

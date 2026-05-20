@@ -40,6 +40,8 @@ object Routes {
     const val ADMIN_ESTADISTICAS    = "admin_estadisticas"
     const val ADMIN_REPORTES        = "admin_reportes"
     const val ADMIN_NOTIFICACIONES  = "admin_notificaciones"
+    const val RESERVA_DETALLE      = "reserva_detalle/{idReserva}"
+    const val LISTA_CONDUCTORES    = "lista_conductores"
 }
 
 @Composable
@@ -128,5 +130,12 @@ fun AppNavigation() {
         composable(Routes.ADMIN_ESTADISTICAS) { AdminEstadisticasScreen(navController, adminViewModel) }
         composable(Routes.ADMIN_REPORTES)     { AdminReportesScreen(navController, adminViewModel) }
         composable(Routes.ADMIN_NOTIFICACIONES){ AdminNotificacionesScreen(navController, adminViewModel) }
+        composable(Routes.RESERVA_DETALLE) { back ->
+            val idReserva = back.arguments?.getString("idReserva")?.toLongOrNull() ?: 0L
+            ReservaDetalleScreen(idReserva, navController, authViewModel)
+        }
+        composable(Routes.LISTA_CONDUCTORES) {
+            ListaConductoresScreen(navController, authViewModel, viajeViewModel)
+        }
     }
 }

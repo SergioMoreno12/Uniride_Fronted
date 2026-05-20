@@ -7,5 +7,6 @@ data class Usuario(
     val telefono: String? = null,
     val fechaRegistro: String = "",
     val rol: String = "pasajero",
-    val activo: Boolean = true
+    val activo: Boolean = true,
+    val fotoPerfil: String? = null
 )

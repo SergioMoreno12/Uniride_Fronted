@@ -2,6 +2,7 @@ package com.example.uniride.interfaces
 
 import com.example.uniride.model.*
 import com.example.uniride.model.dto.*
+import okhttp3.MultipartBody
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -24,10 +25,11 @@ interface ApiService {
     @GET("/api/usuarios/correo/{correo}")
     suspend fun buscarPorCorreo(@Path("correo") correo: String): Usuario
 
+    // Actualiza perfil incluyendo rol y fotoPerfil
     @PATCH("/api/usuarios/{id}/perfil")
     suspend fun actualizarPerfil(
         @Path("id") id: Long,
-        @Body body: Map<String, String>
+        @Body dto: ActualizarPerfilDTO
     ): Usuario
 
     @PATCH("/api/usuarios/{id}/contrasena")
@@ -67,10 +69,7 @@ interface ApiService {
     suspend fun crearVehiculo(@Body dto: VehiculoDTO): Vehiculo
 
     @PUT("/api/vehiculos/{id}")
-    suspend fun editarVehiculo(
-        @Path("id") id: Long,
-        @Body dto: VehiculoDTO
-    ): Vehiculo
+    suspend fun editarVehiculo(@Path("id") id: Long, @Body dto: VehiculoDTO): Vehiculo
 
     @DELETE("/api/vehiculos/{id}")
     suspend fun eliminarVehiculo(@Path("id") id: Long)
@@ -127,10 +126,7 @@ interface ApiService {
     suspend fun obtenerReportes(): List<Reporte>
 
     @PUT("/api/reportes/{id}")
-    suspend fun actualizarReporte(
-        @Path("id") id: Long,
-        @Body body: Map<String, String>
-    ): Reporte
+    suspend fun actualizarReporte(@Path("id") id: Long, @Body body: Map<String, String>): Reporte
 
     @GET("/api/notificaciones")
     suspend fun obtenerNotificaciones(): List<Notificacion>
@@ -155,6 +151,20 @@ interface ApiService {
 
     @GET("/api/calificaciones/reserva/{idReserva}/calificada")
     suspend fun yaCalificada(@Path("idReserva") id: Long): Boolean
+
+    // Agrega estos endpoints a los existentes:
+
+    @DELETE("/api/notificaciones/{id}")
+    suspend fun eliminarNotificacion(@Path("id") id: Long)
+
+    @PATCH("/api/reservas/{id}/calificada")
+    suspend fun marcarReservaCalificada(@Path("id") id: Long)
+
+    @GET("/api/reservas/{id}")
+    suspend fun obtenerReserva(@Path("id") id: Long): Reserva
+
+    @PATCH("/api/viajes/{id}/completar")
+    suspend fun completarViaje(@Path("id") id: Long): Viaje
 }
 
 object RetrofitClient {

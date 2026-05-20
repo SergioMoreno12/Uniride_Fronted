@@ -15,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -26,7 +25,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ViewModel.ViajeViewModel
-import com.example.uniride.model.Viaje
 import com.example.uniride.ui.theme.Routes
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,30 +53,25 @@ fun HomeScreen(
         }
     }
 
+    // Filtrar viajes: ni los ya reservados ni los propios
     val todosViajes = (viajes ?: emptyList()).filter { v ->
         v.idViaje !in (viajesReservados ?: emptySet()) &&
                 v.idViaje !in (viajesPropios ?: emptySet())
     }
 
-    // Agrupaciones para las tarjetas de búsqueda
+    // Agrupaciones para tarjetas de búsqueda
     val conductores = todosViajes
-        .groupBy { it.vehiculo?.usuario?.idUsuario }
-        .filterKeys { it != null }
-        .map { (_, viajesGrupo) -> viajesGrupo.first().vehiculo?.usuario }
-        .filterNotNull()
+        .mapNotNull { it.vehiculo?.usuario }
         .distinctBy { it.idUsuario }
 
     val sedes = todosViajes
-        .groupBy { it.sede?.idSede }
-        .filterKeys { it != null }
-        .map { (_, viajesGrupo) -> viajesGrupo.first().sede }
-        .filterNotNull()
+        .mapNotNull { it.sede }
         .distinctBy { it.idSede }
 
     val ciudades = todosViajes
         .map { it.origen }
-        .distinct()
         .filter { it.isNotBlank() }
+        .distinct()
 
     Scaffold(
         topBar = {
@@ -117,12 +110,13 @@ fun HomeScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             if (cargando) {
-                Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().height(200.dp),
+                    contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             } else {
 
-                // ── Tarjeta Conductores ────────────────────────────────────
+                // ── Tarjeta Conductores ────────────────────────────
                 if (conductores.isNotEmpty()) {
                     Spacer(Modifier.height(16.dp))
                     Text("  Conductores disponibles",
@@ -136,7 +130,8 @@ fun HomeScreen(
                         items(conductores) { conductor ->
                             Card(
                                 onClick = {
-                                    navController.navigate("viajes_por_conductor/${conductor.idUsuario}")
+                                    navController.navigate(
+                                        "viajes_por_conductor/${conductor.idUsuario}")
                                 },
                                 shape = RoundedCornerShape(16.dp),
                                 modifier = Modifier.width(110.dp)
@@ -145,30 +140,20 @@ fun HomeScreen(
                                     modifier = Modifier.padding(12.dp).fillMaxWidth(),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(52.dp)
-                                            .clip(CircleShape)
-                                            .then(
-                                                Modifier.then(
-                                                    Modifier
-                                                )
-                                            ),
-                                        contentAlignment = Alignment.Center
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        modifier = Modifier.size(52.dp)
                                     ) {
-                                        Surface(
-                                            shape = CircleShape,
-                                            color = MaterialTheme.colorScheme.primaryContainer,
-                                            modifier = Modifier.size(52.dp)
-                                        ) {
-                                            Box(contentAlignment = Alignment.Center) {
-                                                Text(
-                                                    conductor.nombre.first().uppercaseChar().toString(),
-                                                    fontSize = 22.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.primary
-                                                )
-                                            }
+                                        Box(contentAlignment = Alignment.Center,
+                                            modifier = Modifier.fillMaxSize()) {
+                                            Text(
+                                                conductor.nombre.first()
+                                                    .uppercaseChar().toString(),
+                                                fontSize = 22.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
                                         }
                                     }
                                     Spacer(Modifier.height(6.dp))
@@ -176,7 +161,8 @@ fun HomeScreen(
                                         conductor.nombre.split(" ").first(),
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                         textAlign = TextAlign.Center
                                     )
                                 }
@@ -185,7 +171,7 @@ fun HomeScreen(
                     }
                 }
 
-                // ── Tarjeta Sedes ──────────────────────────────────────────
+                // ── Tarjeta Sedes ──────────────────────────────────
                 if (sedes.isNotEmpty()) {
                     Spacer(Modifier.height(16.dp))
                     Text("  Sedes con viajes",
@@ -217,9 +203,12 @@ fun HomeScreen(
                                         maxLines = 2, overflow = TextOverflow.Ellipsis)
                                     Text(sede.ciudad,
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                        color = MaterialTheme.colorScheme.onSurface
+                                            .copy(alpha = 0.6f))
                                     Spacer(Modifier.height(4.dp))
-                                    val count = todosViajes.count { it.sede?.idSede == sede.idSede }
+                                    val count = todosViajes.count {
+                                        it.sede?.idSede == sede.idSede
+                                    }
                                     Text("$count viaje${if (count > 1) "s" else ""}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.secondary,
@@ -230,7 +219,7 @@ fun HomeScreen(
                     }
                 }
 
-                // ── Tarjeta Ciudades ───────────────────────────────────────
+                // ── Tarjeta Ciudades ───────────────────────────────
                 if (ciudades.isNotEmpty()) {
                     Spacer(Modifier.height(16.dp))
                     Text("  Por ciudad de origen",
@@ -273,7 +262,7 @@ fun HomeScreen(
                     }
                 }
 
-                // ── Todos los viajes ───────────────────────────────────────
+                // ── Lista de viajes ────────────────────────────────
                 Spacer(Modifier.height(20.dp))
                 Text("  Todos los viajes disponibles",
                     fontWeight = FontWeight.Bold,
@@ -281,15 +270,54 @@ fun HomeScreen(
                 Spacer(Modifier.height(8.dp))
 
                 if (todosViajes.isEmpty()) {
-                    Box(Modifier.fillMaxWidth().padding(top = 32.dp, bottom = 32.dp),
-                        contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Filled.DirectionsCar, null,
-                                modifier = Modifier.size(64.dp),
-                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-                            Spacer(Modifier.height(8.dp))
-                            Text("No hay viajes disponibles",
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    // ── Estado vacío con opción de contactar conductor ──
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Filled.DirectionsCar, null,
+                            modifier = Modifier.size(72.dp),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "No hay viajes disponibles en este momento",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Puedes contactar directamente a un conductor para coordinar tu viaje",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(20.dp))
+                        Button(
+                            onClick = {
+                                navController.navigate(Routes.LISTA_CONDUCTORES)
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Filled.People, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Ver conductores disponibles",
+                                fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                viajeViewModel.cargarDisponibles(sesion?.idUsuario)
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Filled.Refresh, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Recargar viajes")
                         }
                     }
                 } else {

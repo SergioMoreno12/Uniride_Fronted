@@ -12,15 +12,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.interfaces.RetrofitClient
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import com.example.uniride.model.Usuario
+import com.example.uniride.ui.theme.Routes
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,12 +28,25 @@ fun CalificarConductorScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel()
 ) {
-    val sesion  = authViewModel.sesionActual
-    val context = LocalContext.current
+    val sesion      = authViewModel.sesionActual
+    val scope       = rememberCoroutineScope()
+    val context     = LocalContext.current
 
     var puntuacion  by remember { mutableIntStateOf(0) }
     var comentario  by remember { mutableStateOf("") }
     var cargando    by remember { mutableStateOf(false) }
+    var conductor   by remember { mutableStateOf<Usuario?>(null) }
+    var yaCalificado by remember { mutableStateOf(false) }
+
+    LaunchedEffect(idConductor) {
+        scope.launch {
+            try {
+                conductor = RetrofitClient.apiService.obtenerUsuario(idConductor)
+                // Verificar si ya calificó
+                yaCalificado = RetrofitClient.apiService.yaCalificada(idReserva)
+            } catch (e: Exception) { }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -57,100 +68,133 @@ fun CalificarConductorScreen(
                 .padding(padding)
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Icon(Icons.Filled.Star, null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(64.dp))
+            if (yaCalificado) {
+                // Ya calificó
+                Spacer(Modifier.height(40.dp))
+                Icon(Icons.Filled.CheckCircle, null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(72.dp))
+                Spacer(Modifier.height(12.dp))
+                Text("Ya calificaste este viaje",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold)
+                Text("Solo puedes calificar una vez por viaje",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Spacer(Modifier.height(24.dp))
+                Button(
+                    onClick = {
+                        navController.navigate(Routes.HOME) {
+                            popUpTo(0) { inclusive = false }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("Volver al inicio") }
+            } else {
+                Icon(Icons.Filled.Star, null,
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(56.dp))
 
-            Text("¿Cómo fue tu experiencia?",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold)
+                Text("¿Cómo fue tu viaje?",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold)
 
-            Text("Selecciona una puntuación del 1 al 5",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                conductor?.let {
+                    Text("Con ${it.nombre}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.primary)
+                }
 
-            // Estrellas
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                (1..5).forEach { estrella ->
-                    IconButton(onClick = { puntuacion = estrella },
-                        modifier = Modifier.size(48.dp)) {
-                        Icon(
-                            if (estrella <= puntuacion) Icons.Filled.Star
-                            else Icons.Filled.StarBorder,
-                            contentDescription = "$estrella estrellas",
-                            tint = if (estrella <= puntuacion)
-                                MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                            modifier = Modifier.size(40.dp)
-                        )
+                // Estrellas
+                Row(horizontalArrangement = Arrangement.Center) {
+                    (1..5).forEach { i ->
+                        IconButton(onClick = { puntuacion = i }) {
+                            Icon(
+                                if (i <= puntuacion) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                null,
+                                tint = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
                     }
                 }
-            }
 
-            if (puntuacion > 0) {
-                Text(
-                    when (puntuacion) {
-                        1 -> "Muy malo"
-                        2 -> "Malo"
-                        3 -> "Regular"
-                        4 -> "Bueno"
-                        5 -> "Excelente"
-                        else -> ""
-                    },
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
+                if (puntuacion > 0) {
+                    Text(
+                        when (puntuacion) {
+                            1 -> "😞 Muy malo"
+                            2 -> "😐 Malo"
+                            3 -> "🙂 Regular"
+                            4 -> "😊 Bueno"
+                            5 -> "🤩 Excelente"
+                            else -> ""
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                TextField(
+                    value = comentario,
+                    onValueChange = { comentario = it },
+                    label = { Text("Comentario (opcional)") },
+                    placeholder = { Text("Cuéntanos cómo fue el viaje...") },
+                    maxLines = 3,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
                 )
-            }
 
-            TextField(
-                value = comentario, onValueChange = { comentario = it },
-                label = { Text("Comentario (opcional)") },
-                leadingIcon = { Icon(Icons.Filled.Comment, null) },
-                maxLines = 3, modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            )
-
-            Button(
-                onClick = {
-                    if (puntuacion == 0) {
-                        Toast.makeText(context, "Selecciona una puntuación", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-                    cargando = true
-                    CoroutineScope(Dispatchers.IO).launch {
-                        try {
-                            RetrofitClient.apiService.calificarConductor(
-                                mapOf(
-                                    "puntuacion" to puntuacion,
-                                    "comentario" to comentario,
-                                    "fechaCalificacion" to LocalDate.now().toString(),
-                                    "idReserva" to idReserva,
-                                    "idConductor" to idConductor,
-                                    "idPasajero" to (sesion?.idUsuario ?: 0L)
+                Button(
+                    onClick = {
+                        if (puntuacion == 0) {
+                            Toast.makeText(context, "Selecciona una calificación",
+                                android.widget.Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        cargando = true
+                        scope.launch {
+                            try {
+                                RetrofitClient.apiService.calificarConductor(
+                                    mapOf(
+                                        "puntuacion"  to puntuacion,
+                                        "comentario"  to comentario,
+                                        "idReserva"   to idReserva,
+                                        "idConductor" to idConductor,
+                                        "idPasajero"  to (sesion?.idUsuario ?: 0L)
+                                    )
                                 )
-                            )
-                            CoroutineScope(Dispatchers.Main).launch {
-                                Toast.makeText(context, "¡Gracias por tu calificación!", Toast.LENGTH_SHORT).show()
-                                navController.popBackStack()
-                            }
-                        } catch (e: Exception) {
-                            CoroutineScope(Dispatchers.Main).launch {
-                                Toast.makeText(context, "Ya calificaste este viaje", Toast.LENGTH_SHORT).show()
+                                // Marcar reserva como calificada
+                                RetrofitClient.apiService.marcarReservaCalificada(idReserva)
+                                cargando = false
+                                Toast.makeText(context, "¡Gracias por tu calificación!",
+                                    android.widget.Toast.LENGTH_SHORT).show()
+                                // Ir al inicio
+                                navController.navigate(Routes.HOME) {
+                                    popUpTo(0) { inclusive = false }
+                                }
+                            } catch (e: Exception) {
+                                cargando = false
+                                Toast.makeText(context, e.message ?: "Error al calificar",
+                                    android.widget.Toast.LENGTH_SHORT).show()
                             }
                         }
-                        cargando = false
+                    },
+                    enabled = !cargando && puntuacion > 0,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    if (cargando) CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                    else {
+                        Icon(Icons.Filled.Send, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Enviar calificación", fontWeight = FontWeight.Bold)
                     }
-                },
-                enabled = !cargando && puntuacion > 0,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                if (cargando)
-                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                else Text("Enviar calificación", fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

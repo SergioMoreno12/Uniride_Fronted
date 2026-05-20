@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.uniride.interfaces.RetrofitClient
 import com.example.uniride.model.Usuario
 import com.example.uniride.model.Vehiculo
+import com.example.uniride.model.dto.ActualizarPerfilDTO
 import com.example.uniride.model.dto.VehiculoDTO
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -25,7 +26,6 @@ class PerfilViewModel : ViewModel() {
     private val _perfilUsuario = MutableLiveData<Usuario?>(null)
     val perfilUsuario: MutableLiveData<Usuario?> = _perfilUsuario
 
-    // ── Cargar perfil completo desde el backend ────────────────────
     fun cargarPerfil(idUsuario: Long) {
         viewModelScope.launch {
             _cargando.postValue(true)
@@ -41,15 +41,26 @@ class PerfilViewModel : ViewModel() {
         }
     }
 
-    // ── Actualizar nombre y teléfono ───────────────────────────────
-    fun actualizarPerfil(idUsuario: Long, nombre: String, telefono: String) {
+    // Actualiza datos + opcionalmente el rol
+    fun actualizarPerfil(
+        idUsuario: Long,
+        nombre: String,
+        telefono: String,
+        rol: String? = null,
+        fotoPerfil: String? = null
+    ) {
         viewModelScope.launch {
             _cargando.postValue(true)
             try {
                 val usuario = withContext(Dispatchers.IO) {
                     RetrofitClient.apiService.actualizarPerfil(
                         idUsuario,
-                        mapOf("nombre" to nombre, "telefono" to telefono)
+                        ActualizarPerfilDTO(
+                            nombre     = nombre,
+                            telefono   = telefono,
+                            rol        = rol,
+                            fotoPerfil = fotoPerfil
+                        )
                     )
                 }
                 _perfilUsuario.postValue(usuario)
@@ -61,7 +72,6 @@ class PerfilViewModel : ViewModel() {
         }
     }
 
-    // ── Cambiar contraseña ─────────────────────────────────────────
     fun cambiarContrasena(idUsuario: Long, actual: String, nueva: String) {
         viewModelScope.launch {
             _cargando.postValue(true)
@@ -80,7 +90,6 @@ class PerfilViewModel : ViewModel() {
         }
     }
 
-    // ── Cargar vehículos del conductor ─────────────────────────────
     fun cargarMisVehiculos(idUsuario: Long) {
         viewModelScope.launch {
             try {
@@ -94,28 +103,14 @@ class PerfilViewModel : ViewModel() {
         }
     }
 
-    // ── Registrar vehículo usando DTO tipado ───────────────────────
-    // Se usa VehiculoDTO en lugar de Map<String, Any> para evitar
-    // que Gson serialice Int como Double (bug java.lang.Object cast)
-    fun registrarVehiculo(
-        placa: String,
-        marca: String,
-        modelo: String,
-        capacidad: Int,
-        idUsuario: Long
-    ) {
+    fun registrarVehiculo(placa: String, marca: String, modelo: String,
+                          capacidad: Int, idUsuario: Long) {
         viewModelScope.launch {
             _cargando.postValue(true)
             try {
                 withContext(Dispatchers.IO) {
                     RetrofitClient.apiService.crearVehiculo(
-                        VehiculoDTO(
-                            placa     = placa,
-                            marca     = marca,
-                            modelo    = modelo,
-                            capacidad = capacidad,
-                            idUsuario = idUsuario
-                        )
+                        VehiculoDTO(placa, marca, modelo, capacidad, idUsuario)
                     )
                 }
                 _mensaje.postValue("Vehículo registrado con éxito")

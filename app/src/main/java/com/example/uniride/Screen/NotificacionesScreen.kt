@@ -1,5 +1,6 @@
 package com.example.uniride.Screen
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,18 +18,21 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ViewModel.NotifViewModel
+import com.example.uniride.interfaces.RetrofitClient
 import com.example.uniride.ui.theme.Routes
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificacionesScreen(
     navController: NavController,
-    authViewModel: AuthViewModel = viewModel(),
+    authViewModel: AuthViewModel   = viewModel(),
     notifViewModel: NotifViewModel = viewModel()
 ) {
-    val sesion          = authViewModel.sesionActual
-    val notificaciones  by notifViewModel.notificaciones.observeAsState(emptyList())
-    val cargando        by notifViewModel.cargando.observeAsState(false)
+    val sesion         = authViewModel.sesionActual
+    val notificaciones by notifViewModel.notificaciones.observeAsState(emptyList())
+    val cargando       by notifViewModel.cargando.observeAsState(false)
+    val scope          = rememberCoroutineScope()
 
     LaunchedEffect(true) {
         sesion?.idUsuario?.let { notifViewModel.cargarNotificaciones(it) }
@@ -48,7 +52,10 @@ fun NotificacionesScreen(
             )
         },
         bottomBar = {
-            BottomNavBar(currentRoute = "notificaciones", rol = sesion?.rol ?: "usuario") { route ->
+            BottomNavBar(
+                currentRoute = "notificaciones",
+                rol = sesion?.rol ?: "usuario"
+            ) { route ->
                 navController.navigate(route) {
                     popUpTo(Routes.HOME) { saveState = true }
                     launchSingleTop = true; restoreState = true
@@ -62,10 +69,12 @@ fun NotificacionesScreen(
             }
         } else {
             val lista = (notificaciones ?: emptyList())
+                .sortedByDescending { it.fechaEnvio }
+
             if (lista.isEmpty()) {
                 Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Filled.Notifications, null,
+                        Icon(Icons.Filled.NotificationsNone, null,
                             modifier = Modifier.size(64.dp),
                             tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
                         Spacer(Modifier.height(8.dp))
@@ -85,27 +94,51 @@ fun NotificacionesScreen(
                     lista.forEach { notif ->
                         Card(
                             onClick = {
+                                // Marcar como leída
                                 if (!notif.leida) {
-                                    sesion?.idUsuario?.let {
-                                        notifViewModel.marcarLeida(notif.idNotificacion, it)
+                                    sesion?.idUsuario?.let { uid ->
+                                        notifViewModel.marcarLeida(notif.idNotificacion, uid)
                                     }
+                                }
+                                // Navegar a pantalla correspondiente
+                                when {
+                                    notif.idViaje != null && sesion?.rol == "conductor" ->
+                                        navController.navigate("viaje_activo/${notif.idViaje}")
+                                    notif.idViaje != null && sesion?.rol == "pasajero" ->
+                                        navController.navigate(Routes.MIS_RESERVAS)
+                                    notif.titulo.contains("calificación", ignoreCase = true) ->
+                                        navController.navigate("conductor_perfil/${sesion?.idUsuario}")
+                                    else -> { /* no navegar */ }
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(14.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (!notif.leida)
                                     MaterialTheme.colorScheme.primaryContainer
                                 else MaterialTheme.colorScheme.surfaceVariant
                             )
                         ) {
-                            Row(modifier = Modifier.padding(16.dp),
-                                verticalAlignment = Alignment.Top) {
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                // Icono
                                 Icon(
-                                    if (!notif.leida) Icons.Filled.NotificationsActive
-                                    else Icons.Filled.Notifications,
+                                    when {
+                                        notif.titulo.contains("confirmada", ignoreCase = true) ->
+                                            Icons.Filled.CheckCircle
+                                        notif.titulo.contains("reserva", ignoreCase = true) ->
+                                            Icons.Filled.BookOnline
+                                        notif.titulo.contains("calificación", ignoreCase = true) ->
+                                            Icons.Filled.Star
+                                        notif.titulo.contains("viaje", ignoreCase = true) ->
+                                            Icons.Filled.DirectionsCar
+                                        else -> Icons.Filled.Notifications
+                                    },
                                     null,
-                                    tint = if (!notif.leida) MaterialTheme.colorScheme.primary
+                                    tint = if (!notif.leida)
+                                        MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                                     modifier = Modifier.size(24.dp)
                                 )
@@ -121,16 +154,24 @@ fun NotificacionesScreen(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
                                 }
-                                if (!notif.leida) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .padding(top = 4.dp)
-                                    ) {
-                                        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-                                            drawCircle(color = androidx.compose.ui.graphics.Color(0xFF1565C0))
+                                // Botón eliminar
+                                IconButton(
+                                    onClick = {
+                                        scope.launch {
+                                            try {
+                                                RetrofitClient.apiService
+                                                    .eliminarNotificacion(notif.idNotificacion)
+                                                sesion?.idUsuario?.let { uid ->
+                                                    notifViewModel.cargarNotificaciones(uid)
+                                                }
+                                            } catch (e: Exception) { }
                                         }
-                                    }
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(Icons.Filled.Delete, "Eliminar",
+                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(18.dp))
                                 }
                             }
                         }

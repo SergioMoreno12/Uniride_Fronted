@@ -1,6 +1,7 @@
 package com.example.uniride.ui.theme
 
 import android.app.Activity
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -17,11 +18,11 @@ private val LightColors = lightColorScheme(
     secondary            = Green500,
     onSecondary          = Color.White,
     secondaryContainer   = Green100,
-    onSecondaryContainer = Color(0xFF004D40),
+    onSecondaryContainer = Color(0xFF004D54),
     tertiary             = Orange500,
     onTertiary           = Color.White,
     tertiaryContainer    = Orange100,
-    onTertiaryContainer  = Color(0xFF7F2700),
+    onTertiaryContainer  = Color(0xFF4A2500),
     background           = BgLight,
     onBackground         = Color(0xFF0D1117),
     surface              = SurfaceLight,
@@ -31,42 +32,57 @@ private val LightColors = lightColorScheme(
     outline              = Color(0xFFBCC5D8),
     error                = Color(0xFFD32F2F),
     onError              = Color.White,
+    surfaceContainer     = CardLight,
 )
 
 private val DarkColors = darkColorScheme(
     primary              = Blue300,
-    onPrimary            = Color(0xFF001A3D),
-    primaryContainer     = Blue900,
+    onPrimary            = Color(0xFF003366),
+    primaryContainer     = Color(0xFF1565C0),
     onPrimaryContainer   = Blue100,
     secondary            = Green300,
-    onSecondary          = Color(0xFF002925),
-    secondaryContainer   = Color(0xFF00413A),
+    onSecondary          = Color(0xFF002B30),
+    secondaryContainer   = Color(0xFF006978),
     onSecondaryContainer = Green100,
     tertiary             = Orange300,
-    onTertiary           = Color(0xFF4A1500),
-    tertiaryContainer    = Color(0xFF7F2700),
+    onTertiary           = Color(0xFF3E1F00),
+    tertiaryContainer    = Color(0xFF7A4200),
     onTertiaryContainer  = Orange100,
     background           = BgDark,
-    onBackground         = TextDarkMode,
+    onBackground         = TextPrimary,
     surface              = SurfaceDark,
-    onSurface            = TextDarkMode,
+    onSurface            = TextPrimary,
     surfaceVariant       = CardDark,
-    onSurfaceVariant     = SubtextDark,
-    outline              = Color(0xFF3A4560),
+    onSurfaceVariant     = TextSecondary,
+    outline              = DividerDark,
     error                = Color(0xFFFF6B6B),
     onError              = Color(0xFF3D0000),
+    surfaceContainer     = ElevatedDark,
+    inverseSurface       = Color(0xFFE0E0E0),
+    inverseOnSurface     = Color(0xFF121212),
 )
 
-// Estado global del tema — persiste en memoria durante la sesión
+enum class ThemeMode { LIGHT, DARK, SYSTEM }
+
 object ThemeState {
-    var isDarkMode = mutableStateOf(false)
+    var themeMode = mutableStateOf(ThemeMode.SYSTEM)
+    // Legacy compatibility
+    var isDarkMode: Boolean
+        get() = themeMode.value == ThemeMode.DARK
+        set(value) { themeMode.value = if (value) ThemeMode.DARK else ThemeMode.LIGHT }
 }
 
 @Composable
 fun UnirideTheme(
-    darkTheme: Boolean = ThemeState.isDarkMode.value,
     content: @Composable () -> Unit
 ) {
+    val systemDark = isSystemInDarkTheme()
+    val darkTheme = when (ThemeState.themeMode.value) {
+        ThemeMode.DARK   -> true
+        ThemeMode.LIGHT  -> false
+        ThemeMode.SYSTEM -> systemDark
+    }
+
     val colors = if (darkTheme) DarkColors else LightColors
     val view = LocalView.current
 

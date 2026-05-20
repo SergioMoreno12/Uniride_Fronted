@@ -33,15 +33,13 @@ fun MisViajesScreen(
     viajeViewModel: ViajeViewModel     = viewModel(),
     reservaViewModel: ReservaViewModel = viewModel()
 ) {
-    val sesion        = authViewModel.sesionActual
-    val misViajes     by viajeViewModel.misViajes.observeAsState(emptyList())
-    val cargando      by viajeViewModel.cargando.observeAsState(false)
-    val mensaje       by viajeViewModel.mensaje.observeAsState(null)
-    val reservasViaje by reservaViewModel.reservasViaje.observeAsState(emptyList())
-    val context       = LocalContext.current
-    val scope         = rememberCoroutineScope()
+    val sesion    = authViewModel.sesionActual
+    val misViajes by viajeViewModel.misViajes.observeAsState(emptyList())
+    val cargando  by viajeViewModel.cargando.observeAsState(false)
+    val mensaje   by viajeViewModel.mensaje.observeAsState(null)
+    val context   = LocalContext.current
+    val scope     = rememberCoroutineScope()
 
-    var viajeExpandido by remember { mutableStateOf<Long?>(null) }
     var viajeACancelar by remember { mutableStateOf<Viaje?>(null) }
     var viajeAEditar   by remember { mutableStateOf<Viaje?>(null) }
     var editOrigen     by remember { mutableStateOf("") }
@@ -49,7 +47,6 @@ fun MisViajesScreen(
     var editFecha      by remember { mutableStateOf("") }
     var editCosto      by remember { mutableStateOf("") }
 
-    // Función reutilizable para cargar mis viajes
     suspend fun cargarViajes() {
         sesion?.idUsuario?.let { idUsuario ->
             try {
@@ -61,14 +58,16 @@ fun MisViajesScreen(
         }
     }
 
-    LaunchedEffect(true) {
-        cargarViajes()
-    }
+    LaunchedEffect(true) { cargarViajes() }
 
     LaunchedEffect(mensaje) {
         mensaje?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
             viajeViewModel.limpiarMensaje()
+            // Recargar lista si se canceló o editó
+            if (it.contains("cancelado") || it.contains("actualizado")) {
+                cargarViajes()
+            }
         }
     }
 
@@ -77,12 +76,13 @@ fun MisViajesScreen(
             TopAppBar(
                 title = { Text("Viajes publicados") },
                 actions = {
-                    // Botón historial de viajes
+                    // Botón historial
                     IconButton(onClick = {
                         navController.navigate(Routes.HISTORIAL_VIAJES)
                     }) {
                         Icon(Icons.Filled.History, "Historial")
                     }
+                    // Botón recargar
                     IconButton(onClick = {
                         scope.launch { cargarViajes() }
                     }) {
@@ -103,42 +103,59 @@ fun MisViajesScreen(
         }
     ) { padding ->
         if (cargando) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
         } else {
-            val lista = misViajes ?: emptyList()
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (lista.isEmpty()) {
-                    Box(
-                        Modifier.fillMaxWidth().padding(top = 80.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Filled.DirectionsCar, null,
-                                modifier = Modifier.size(64.dp),
-                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-                            Spacer(Modifier.height(8.dp))
-                            Text("No has publicado viajes aún",
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            val lista = (misViajes ?: emptyList())
+                .filter { it.estado != "cancelado" } // solo activos
+                .sortedByDescending { it.fechaHora }  // más recientes primero
+
+            if (lista.isEmpty()) {
+                Box(Modifier.fillMaxSize().padding(padding),
+                    contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Filled.DirectionsCar, null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                        Spacer(Modifier.height(8.dp))
+                        Text("No tienes viajes publicados",
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                        Spacer(Modifier.height(16.dp))
+                        Button(
+                            onClick = { navController.navigate(Routes.PUBLICAR) },
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Filled.Add, null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Publicar viaje")
                         }
                     }
-                } else {
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     lista.forEach { viaje ->
+                        // ── Cada viaje es clickable para ver el detalle ──
                         Card(
+                            onClick = {
+                                // Al tocar la tarjeta → ViajeActivoDetalleScreen
+                                navController.navigate("viaje_activo/${viaje.idViaje}")
+                            },
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp)
+                            shape = RoundedCornerShape(16.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
 
-                                // ── Encabezado ────────────────────────────
+                                // ── Encabezado ─────────────────────────────
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -149,141 +166,97 @@ fun MisViajesScreen(
                                             "${viaje.origen} → ${viaje.sede?.nombreSede ?: viaje.destino}",
                                             fontWeight = FontWeight.SemiBold
                                         )
+                                        // Fecha y hora separadas
                                         Text(
-                                            viaje.fechaHora.take(16).replace("T", " "),
+                                            "📅 ${viaje.fechaHora.take(10)}  " +
+                                                    "🕐 ${if (viaje.fechaHora.length >= 16)
+                                                        viaje.fechaHora.substring(11, 16) else "--:--"}",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                         )
+                                        if (!viaje.horaLlegada.isNullOrBlank()) {
+                                            Text(
+                                                "🏁 Llegada: ${if (viaje.horaLlegada.length >= 16)
+                                                    viaje.horaLlegada.substring(11, 16) else "--:--"}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.8f)
+                                            )
+                                        }
                                         Text(
                                             "$ ${"%.0f".format(viaje.costo)} · ${viaje.vehiculo?.capacidad} puestos",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.primary
                                         )
                                     }
-                                    AssistChip(onClick = {}, label = {
-                                        Text(viaje.estado,
-                                            style = MaterialTheme.typography.labelSmall)
-                                    })
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        AssistChip(
+                                            onClick = {},
+                                            label = {
+                                                Text(viaje.estado.replaceFirstChar { it.uppercase() },
+                                                    style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Icon(Icons.Filled.ChevronRight, "Ver detalle",
+                                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                                    }
                                 }
 
                                 Spacer(Modifier.height(8.dp))
+                                HorizontalDivider()
+                                Spacer(Modifier.height(8.dp))
 
-                                // ── Botones de acción ─────────────────────
+                                // ── Botones de acción (no navegan al detalle) ───
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    OutlinedButton(
-                                        onClick = {
-                                            viajeExpandido =
-                                                if (viajeExpandido == viaje.idViaje) null
-                                                else {
-                                                    reservaViewModel.cargarReservasViaje(viaje.idViaje)
-                                                    viaje.idViaje
-                                                }
-                                        },
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Icon(
-                                            if (viajeExpandido == viaje.idViaje)
-                                                Icons.Filled.ExpandLess
-                                            else Icons.Filled.Group,
-                                            null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(Modifier.width(4.dp))
-                                        Text("Pasajeros",
-                                            style = MaterialTheme.typography.labelSmall)
-                                    }
-
-                                    if (viaje.estado == "disponible") {
-                                        IconButton(onClick = {
-                                            viajeAEditar = viaje
-                                            editOrigen  = viaje.origen
-                                            editDestino = viaje.destino
-                                            editFecha   = viaje.fechaHora
-                                            editCosto   = viaje.costo.toString()
-                                        }) {
-                                            Icon(Icons.Filled.Edit, "Editar",
-                                                tint = MaterialTheme.colorScheme.primary)
+                                    if (viaje.estado == "disponible" || viaje.estado == "lleno") {
+                                        // Botón editar
+                                        OutlinedButton(
+                                            onClick = {
+                                                viajeAEditar = viaje
+                                                editOrigen  = viaje.origen
+                                                editDestino = viaje.destino
+                                                editFecha   = viaje.fechaHora
+                                                editCosto   = viaje.costo.toString()
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Icon(Icons.Filled.Edit, null,
+                                                modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("Editar",
+                                                style = MaterialTheme.typography.labelSmall)
                                         }
-                                        IconButton(onClick = {
-                                            viajeACancelar = viaje
-                                        }) {
-                                            Icon(Icons.Filled.Cancel, "Cancelar",
-                                                tint = MaterialTheme.colorScheme.error)
+                                        // Botón cancelar
+                                        OutlinedButton(
+                                            onClick = { viajeACancelar = viaje },
+                                            modifier = Modifier.weight(1f),
+                                            colors = ButtonDefaults.outlinedButtonColors(
+                                                contentColor = MaterialTheme.colorScheme.error)
+                                        ) {
+                                            Icon(Icons.Filled.Cancel, null,
+                                                modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("Cancelar",
+                                                style = MaterialTheme.typography.labelSmall)
                                         }
                                     }
                                 }
 
-                                // ── Lista de pasajeros expandida ──────────
-                                if (viajeExpandido == viaje.idViaje) {
-                                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                                    val pasajeros = reservasViaje ?: emptyList()
-                                    Text(
-                                        "Pasajeros (${pasajeros.size})",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(Modifier.height(6.dp))
-
-                                    if (pasajeros.isEmpty()) {
-                                        Text("Sin reservas aún",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                                    } else {
-                                        pasajeros.forEach { reserva ->
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(vertical = 4.dp),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(
-                                                        reserva.usuario?.nombre ?: "-",
-                                                        fontWeight = FontWeight.SemiBold
-                                                    )
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        Icon(Icons.Filled.Phone, null,
-                                                            modifier = Modifier.size(13.dp),
-                                                            tint = MaterialTheme.colorScheme.primary)
-                                                        Spacer(Modifier.width(4.dp))
-                                                        Text(
-                                                            reserva.usuario?.telefono ?: "Sin teléfono",
-                                                            style = MaterialTheme.typography.bodySmall
-                                                        )
-                                                    }
-                                                }
-
-                                                if (!reserva.confirmada) {
-                                                    IconButton(onClick = {
-                                                        reservaViewModel.confirmarReserva(reserva.idReserva)
-                                                    }) {
-                                                        Icon(
-                                                            Icons.Filled.CheckCircle,
-                                                            "Confirmar reserva",
-                                                            tint = MaterialTheme.colorScheme.primary
-                                                        )
-                                                    }
-                                                } else {
-                                                    AssistChip(onClick = {}, label = {
-                                                        Text("Confirmado",
-                                                            style = MaterialTheme.typography.labelSmall)
-                                                    })
-                                                }
-                                            }
-                                            HorizontalDivider()
-                                        }
-                                    }
-                                }
+                                // Hint para tap
+                                Text(
+                                    "Toca para ver pasajeros y detalles",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
                             }
                         }
                     }
+                    Spacer(Modifier.height(16.dp))
                 }
-                Spacer(Modifier.height(16.dp))
             }
         }
     }
@@ -295,7 +268,9 @@ fun MisViajesScreen(
             shape = RoundedCornerShape(20.dp),
             title = { Text("Cancelar viaje") },
             text = {
-                Text("¿Cancelar el viaje de ${v.origen} a ${v.sede?.nombreSede ?: v.destino}?")
+                Text("¿Cancelar el viaje de ${v.origen} a " +
+                        "${v.sede?.nombreSede ?: v.destino} " +
+                        "del ${v.fechaHora.take(10)}?")
             },
             confirmButton = {
                 Button(
@@ -305,7 +280,7 @@ fun MisViajesScreen(
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("Cancelar viaje") }
+                ) { Text("Sí, cancelar") }
             },
             dismissButton = {
                 TextButton(onClick = { viajeACancelar = null }) { Text("No, volver") }
@@ -323,29 +298,25 @@ fun MisViajesScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     TextField(
                         value = editOrigen, onValueChange = { editOrigen = it },
-                        label = { Text("Origen") },
-                        singleLine = true,
+                        label = { Text("Origen") }, singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
                     TextField(
                         value = editDestino, onValueChange = { editDestino = it },
-                        label = { Text("Destino") },
-                        singleLine = true,
+                        label = { Text("Destino") }, singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
                     TextField(
                         value = editFecha, onValueChange = { editFecha = it },
-                        label = { Text("Fecha hora (yyyy-MM-ddTHH:mm:ss)") },
-                        singleLine = true,
+                        label = { Text("Fecha hora (yyyy-MM-ddTHH:mm:ss)") }, singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
                     TextField(
                         value = editCosto, onValueChange = { editCosto = it },
-                        label = { Text("Costo") },
-                        singleLine = true,
+                        label = { Text("Costo") }, singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -354,10 +325,7 @@ fun MisViajesScreen(
             confirmButton = {
                 Button(onClick = {
                     viajeViewModel.editarViaje(
-                        v.idViaje,
-                        editOrigen,
-                        editDestino,
-                        editFecha,
+                        v.idViaje, editOrigen, editDestino, editFecha,
                         editCosto.toDoubleOrNull() ?: v.costo,
                         v.sede?.idSede ?: 0L
                     )

@@ -15,11 +15,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ViewModel.PerfilViewModel
 import com.example.uniride.interfaces.RetrofitClient
@@ -38,16 +40,17 @@ fun PerfilScreen(
     val scope         = rememberCoroutineScope()
     var promedio      by remember { mutableStateOf(0.0) }
 
+    // Usar el rol de la SESIÓN (ya actualizado en SharedPreferences)
+    val rolActual = sesion?.rol ?: "pasajero"
+    val esConductor = rolActual == "conductor"
+
     LaunchedEffect(sesion?.idUsuario) {
         sesion?.idUsuario?.let { id ->
             perfilViewModel.cargarPerfil(id)
-            if (sesion.rol == "conductor") {
+            if (esConductor) {
                 scope.launch {
                     try {
-                        val vehiculos = RetrofitClient.apiService.vehiculosPorUsuario(id)
-                        vehiculos.firstOrNull()?.let { v ->
-                            promedio = RetrofitClient.apiService.promedioConductor(id)
-                        }
+                        promedio = RetrofitClient.apiService.promedioConductor(id)
                     } catch (e: Exception) { }
                 }
             }
@@ -68,7 +71,7 @@ fun PerfilScreen(
             )
         },
         bottomBar = {
-            BottomNavBar(currentRoute = "perfil", rol = sesion?.rol ?: "usuario") { route ->
+            BottomNavBar(currentRoute = "perfil", rol = rolActual) { route ->
                 navController.navigate(route) {
                     popUpTo(Routes.HOME) { saveState = true }
                     launchSingleTop = true; restoreState = true
@@ -86,106 +89,99 @@ fun PerfilScreen(
         ) {
             Spacer(Modifier.height(24.dp))
 
-            // Avatar
-            Box(
-                modifier = Modifier
-                    .size(90.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    perfilUsuario?.nombre?.first()?.uppercaseChar()?.toString()
-                        ?: sesion?.nombre?.first()?.uppercaseChar()?.toString() ?: "U",
-                    fontSize = 36.sp, fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+            // Avatar / foto de perfil
+            val fotoUrl = perfilUsuario?.fotoPerfil ?: sesion?.fotoPerfil
+            if (!fotoUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = fotoUrl,
+                    contentDescription = null,
+                    modifier = Modifier.size(90.dp).clip(CircleShape),
+                    contentScale = ContentScale.Crop
                 )
+            } else {
+                Box(
+                    modifier = Modifier.size(90.dp).clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        (perfilUsuario?.nombre ?: sesion?.nombre ?: "U")
+                            .first().uppercaseChar().toString(),
+                        fontSize = 36.sp, fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
 
             Spacer(Modifier.height(8.dp))
+            Text(perfilUsuario?.nombre ?: sesion?.nombre ?: "Usuario",
+                style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 
-            Text(
-                perfilUsuario?.nombre ?: sesion?.nombre ?: "Usuario",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
+            Text(when (rolActual) {
+                "conductor"     -> "Conductor"
+                "administrador" -> "Administrador"
+                else            -> "Pasajero"
+            },
+                color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
 
-            Text(
-                when (perfilUsuario?.rol ?: sesion?.rol) {
-                    "conductor"     -> "Conductor"
-                    "administrador" -> "Administrador"
-                    else            -> "Pasajero"
-                },
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            // Estrellas promedio para conductores
-            if ((perfilUsuario?.rol ?: sesion?.rol) == "conductor" && promedio > 0) {
+            // Estrellas para conductor
+            if (esConductor && promedio > 0) {
                 Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     (1..5).forEach { i ->
                         Icon(
                             if (i <= promedio.toInt()) Icons.Filled.Star else Icons.Filled.StarBorder,
-                            null,
-                            tint = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.size(20.dp)
-                        )
+                            null, tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(20.dp))
                     }
                     Spacer(Modifier.width(4.dp))
-                    Text("${"%.1f".format(promedio)}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.tertiary,
-                        fontWeight = FontWeight.Bold)
+                    Text("${"%.1f".format(promedio)}", style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.Bold)
                 }
             }
 
             Spacer(Modifier.height(24.dp))
 
-            // Datos del usuario
+            // Datos
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Column(modifier = Modifier.padding(8.dp)) {
-                    InfoRow(Icons.Filled.Person,  "Nombre",   perfilUsuario?.nombre ?: "-")
+                    InfoRowPerfil(Icons.Filled.Person, "Nombre",
+                        perfilUsuario?.nombre ?: "-")
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    InfoRow(Icons.Filled.Email,   "Correo",   perfilUsuario?.correo ?: "-")
+                    InfoRowPerfil(Icons.Filled.Email, "Correo",
+                        perfilUsuario?.correo ?: "-")
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    InfoRow(Icons.Filled.Phone,   "Teléfono", perfilUsuario?.telefono ?: "No registrado")
+                    InfoRowPerfil(Icons.Filled.Phone, "Teléfono",
+                        perfilUsuario?.telefono ?: "No registrado")
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    InfoRow(Icons.Filled.Badge,   "Rol",
-                        when (perfilUsuario?.rol) {
-                            "conductor"     -> "Conductor"
+                    InfoRowPerfil(Icons.Filled.Badge, "Rol",
+                        when (rolActual) {
+                            "conductor" -> "Conductor"
                             "administrador" -> "Administrador"
-                            else            -> "Pasajero"
+                            else -> "Pasajero"
                         })
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    InfoRow(Icons.Filled.CalendarToday, "Miembro desde",
+                    InfoRowPerfil(Icons.Filled.CalendarToday, "Miembro desde",
                         perfilUsuario?.fechaRegistro?.take(10) ?: "-")
                 }
             }
 
             Spacer(Modifier.height(20.dp))
 
-            // Botones de acción
-            Button(
-                onClick = { navController.navigate(Routes.EDITAR_PERFIL) },
+            Button(onClick = { navController.navigate(Routes.EDITAR_PERFIL) },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Filled.Edit, null)
-                Spacer(Modifier.width(8.dp))
+                shape = RoundedCornerShape(12.dp)) {
+                Icon(Icons.Filled.Edit, null); Spacer(Modifier.width(8.dp))
                 Text("Editar perfil", fontWeight = FontWeight.Bold)
             }
 
-            if ((perfilUsuario?.rol ?: sesion?.rol) == "conductor") {
+            // Mi vehículo solo para conductores
+            if (esConductor) {
                 Spacer(Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = { navController.navigate(Routes.MI_VEHICULO) },
+                OutlinedButton(onClick = { navController.navigate(Routes.MI_VEHICULO) },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Filled.DirectionsCar, null)
-                    Spacer(Modifier.width(8.dp))
+                    shape = RoundedCornerShape(12.dp)) {
+                    Icon(Icons.Filled.DirectionsCar, null); Spacer(Modifier.width(8.dp))
                     Text("Mi vehículo", fontWeight = FontWeight.Bold)
                 }
             }
@@ -201,8 +197,7 @@ fun PerfilScreen(
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = MaterialTheme.colorScheme.error)
             ) {
-                Icon(Icons.Filled.Logout, null)
-                Spacer(Modifier.width(8.dp))
+                Icon(Icons.Filled.Logout, null); Spacer(Modifier.width(8.dp))
                 Text("Cerrar sesión", fontWeight = FontWeight.Bold)
             }
 
@@ -212,10 +207,11 @@ fun PerfilScreen(
 }
 
 @Composable
-private fun InfoRow(icon: ImageVector, label: String, value: String) {
+private fun InfoRowPerfil(icon: ImageVector, label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth().padding(16.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(12.dp))
         Column {
             Text(label, style = MaterialTheme.typography.labelSmall,

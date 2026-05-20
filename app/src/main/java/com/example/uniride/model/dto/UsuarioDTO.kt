@@ -4,7 +4,6 @@ data class UsuarioDTO(
     val nombre: String,
     val correo: String,
     val contrasena: String,
-    val telefono: String?,
-    val fechaRegistro: String,
-    val rol: String
+    val telefono: String? = null,
+    val rol: String = "pasajero"
 )

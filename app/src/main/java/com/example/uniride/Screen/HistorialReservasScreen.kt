@@ -35,7 +35,7 @@ fun HistorialReservasScreen(
         sesion?.idUsuario?.let { reservaViewModel.cargarMisReservas(it) }
     }
 
-    // Solo reservas cuya fecha de viaje ya pasó (al día siguiente)
+    // Solo reservas cuya fecha de viaje ya pasó
     val historial = (reservas ?: emptyList()).filter { reserva ->
         val fechaViaje = try {
             LocalDate.parse(reserva.viaje?.fechaHora?.take(10) ?: "")
@@ -91,18 +91,53 @@ fun HistorialReservasScreen(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
 
                 historial.forEach { reserva ->
-                    Card(modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp)) {
+                    // ── Card clickable → detalle de reserva ──────────
+                    Card(
+                        onClick = {
+                            navController.navigate("reserva_detalle/${reserva.idReserva}")
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(),
+
+                            // ── Encabezado ─────────────────────────────
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically) {
-                                Text("Viaje completado", fontWeight = FontWeight.Bold)
-                                Icon(Icons.Filled.CheckCircle, null,
-                                    tint = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier.size(20.dp))
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.CheckCircle, null,
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Viaje completado",
+                                        fontWeight = FontWeight.Bold)
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    // Indicador si ya calificó
+                                    if (reserva.calificada) {
+                                        AssistChip(onClick = {}, label = {
+                                            Text("Calificado",
+                                                style = MaterialTheme.typography.labelSmall)
+                                        }, leadingIcon = {
+                                            Icon(Icons.Filled.Star, null,
+                                                modifier = Modifier.size(12.dp),
+                                                tint = MaterialTheme.colorScheme.tertiary)
+                                        })
+                                        Spacer(Modifier.width(4.dp))
+                                    }
+                                    Icon(Icons.Filled.ChevronRight, "Ver detalle",
+                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                                        modifier = Modifier.size(20.dp))
+                                }
                             }
+
                             Spacer(Modifier.height(8.dp))
+
+                            // ── Info del viaje ─────────────────────────
                             reserva.viaje?.let { v ->
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Filled.LocationOn, null,
@@ -124,11 +159,41 @@ fun HistorialReservasScreen(
                                 Spacer(Modifier.height(4.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Filled.Person, null,
-                                        tint = MaterialTheme.colorScheme.primary,
+                                        tint = MaterialTheme.colorScheme.secondary,
                                         modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(4.dp))
                                     Text("Conductor: ${v.vehiculo?.usuario?.nombre ?: "-"}",
                                         style = MaterialTheme.typography.bodySmall)
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.AttachMoney, null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("$ ${"%.0f".format(v.costo)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+
+                            Spacer(Modifier.height(8.dp))
+                            HorizontalDivider()
+                            Spacer(Modifier.height(6.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Toca para ver detalles",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                                if (!reserva.calificada) {
+                                    Text("Pendiente de calificación",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.tertiary)
                                 }
                             }
                         }

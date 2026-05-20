@@ -1,12 +1,12 @@
 package com.example.uniride.Service
 
-import com.example.uniride.Repository.UsuarioRepository
+import com.example.uniride.interfaces.RetrofitClient
 import com.example.uniride.model.Usuario
 import com.example.uniride.model.dto.UsuarioDTO
-import java.time.LocalDate
 
 class UsuarioService {
-    private val repository = UsuarioRepository()
+
+    private val repository = RetrofitClient.apiService
 
     suspend fun crearUsuario(
         nombre: String,
@@ -16,18 +16,21 @@ class UsuarioService {
         rol: String
     ): Usuario {
         return repository.crearUsuario(
-            UsuarioDTO(
-                nombre = nombre,
-                correo = correo,
+            dto = UsuarioDTO(
+                nombre     = nombre,
+                correo     = correo,
                 contrasena = contrasena,
-                telefono = telefono.ifBlank { null },
-                fechaRegistro = LocalDate.now().toString(),
-                rol = rol
+                telefono   = telefono.ifBlank { null },
+                rol        = rol
             )
         )
     }
 
     suspend fun obtenerUsuario(id: Long): Usuario {
         return repository.obtenerUsuario(id)
+    }
+
+    suspend fun buscarPorCorreo(correo: String): Usuario {
+        return repository.buscarPorCorreo(correo)
     }
 }

@@ -15,12 +15,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.uniride.ViewModel.AuthViewModel
+import com.example.uniride.interfaces.RetrofitClient
+import com.example.uniride.model.dto.UsuarioDTO
 import com.example.uniride.ui.theme.Routes
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterScreen(
     navController: NavController,
@@ -31,201 +37,240 @@ fun RegisterScreen(
     var telefono   by remember { mutableStateOf("") }
     var contrasena by remember { mutableStateOf("") }
     var rol        by remember { mutableStateOf("pasajero") }
+    var verPass    by remember { mutableStateOf(false) }
 
-    val cargando by viewModel.cargando.observeAsState(false)
-    val mensaje  by viewModel.mensaje.observeAsState(null)
+    // Estado local para cargando y errores (no depende del ViewModel)
+    var cargando   by remember { mutableStateOf(false) }
+    var errorMsg   by remember { mutableStateOf<String?>(null) }
+
     val context = LocalContext.current
+    val scope   = rememberCoroutineScope()
 
-    LaunchedEffect(mensaje) {
-        mensaje?.let {
-            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
-            viewModel.limpiarMensaje()
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Crear cuenta") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.Filled.ArrowBack, null)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface)
+            )
         }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(Modifier.height(48.dp))
-
-        Text("Crear cuenta",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary)
-
-        Text("Universidad de Cundinamarca",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-
-        Spacer(Modifier.height(32.dp))
-
-        // ── Campos de texto ───────────────────────────────────────────
-        TextField(
-            value = nombre, onValueChange = { nombre = it },
-            label = { Text("Nombre completo") },
-            leadingIcon = { Icon(Icons.Filled.Person, null) },
-            singleLine = true, modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
-        )
-        Spacer(Modifier.height(12.dp))
-
-        TextField(
-            value = correo, onValueChange = { correo = it },
-            label = { Text("Correo institucional") },
-            leadingIcon = { Icon(Icons.Filled.Email, null) },
-            singleLine = true, modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
-        )
-        Spacer(Modifier.height(12.dp))
-
-        TextField(
-            value = telefono, onValueChange = { telefono = it },
-            label = { Text("Teléfono") },
-            leadingIcon = { Icon(Icons.Filled.Phone, null) },
-            singleLine = true, modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
-        )
-        Spacer(Modifier.height(12.dp))
-
-        TextField(
-            value = contrasena, onValueChange = { contrasena = it },
-            label = { Text("Contraseña") },
-            leadingIcon = { Icon(Icons.Filled.Lock, null) },
-            visualTransformation = PasswordVisualTransformation(),
-            singleLine = true, modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
-        )
-
-        Spacer(Modifier.height(20.dp))
-
-        // ── Selector de rol ────────────────────────────────────────────
-        Text("¿Cómo vas a usar la app?",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.align(Alignment.Start))
-
-        Spacer(Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Pasajero
-            Card(
-                onClick = { rol = "pasajero" },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (rol == "pasajero")
-                        MaterialTheme.colorScheme.primaryContainer
-                    else
-                        MaterialTheme.colorScheme.surface
-                ),
-                border = if (rol == "pasajero")
-                    androidx.compose.foundation.BorderStroke(
-                        2.dp, MaterialTheme.colorScheme.primary)
-                else
-                    androidx.compose.foundation.BorderStroke(
-                        1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+            Text("Únete a UniRide",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold)
+            Text("Completa tus datos para registrarte",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+
+            Spacer(Modifier.height(4.dp))
+
+            // ── Nombre ────────────────────────────────────────────
+            TextField(
+                value = nombre, onValueChange = { nombre = it },
+                label = { Text("Nombre completo") },
+                leadingIcon = { Icon(Icons.Filled.Person, null) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            // ── Correo ────────────────────────────────────────────
+            TextField(
+                value = correo, onValueChange = { correo = it },
+                label = { Text("Correo electrónico") },
+                leadingIcon = { Icon(Icons.Filled.Email, null) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            // ── Teléfono ──────────────────────────────────────────
+            TextField(
+                value = telefono, onValueChange = { telefono = it },
+                label = { Text("Teléfono (opcional)") },
+                leadingIcon = { Icon(Icons.Filled.Phone, null) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            // ── Contraseña ────────────────────────────────────────
+            TextField(
+                value = contrasena, onValueChange = { contrasena = it },
+                label = { Text("Contraseña") },
+                leadingIcon = { Icon(Icons.Filled.Lock, null) },
+                trailingIcon = {
+                    IconButton(onClick = { verPass = !verPass }) {
+                        Icon(if (verPass) Icons.Filled.VisibilityOff
+                        else Icons.Filled.Visibility, null)
+                    }
+                },
+                visualTransformation = if (verPass) VisualTransformation.None
+                else PasswordVisualTransformation(),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            // ── Selector de rol ───────────────────────────────────
+            Text("¿Cómo quieres usar UniRide?",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(Icons.Filled.Person, null,
-                        tint = if (rol == "pasajero")
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                        modifier = Modifier.size(32.dp))
-                    Spacer(Modifier.height(6.dp))
-                    Text("Pasajero",
-                        fontWeight = if (rol == "pasajero") FontWeight.Bold else FontWeight.Normal,
-                        color = if (rol == "pasajero")
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        style = MaterialTheme.typography.bodyMedium)
-                    Text("Busca y reserva viajes",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                }
-            }
-
-            // Conductor
-            Card(
-                onClick = { rol = "conductor" },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (rol == "conductor")
-                        MaterialTheme.colorScheme.primaryContainer
-                    else
-                        MaterialTheme.colorScheme.surface
-                ),
-                border = if (rol == "conductor")
-                    androidx.compose.foundation.BorderStroke(
-                        2.dp, MaterialTheme.colorScheme.primary)
-                else
-                    androidx.compose.foundation.BorderStroke(
-                        1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(Icons.Filled.DirectionsCar, null,
-                        tint = if (rol == "conductor")
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                        modifier = Modifier.size(32.dp))
-                    Spacer(Modifier.height(6.dp))
-                    Text("Conductor",
-                        fontWeight = if (rol == "conductor") FontWeight.Bold else FontWeight.Normal,
-                        color = if (rol == "conductor")
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        style = MaterialTheme.typography.bodyMedium)
-                    Text("Publica y ofrece viajes",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                }
-            }
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Button(
-            onClick = {
-                viewModel.registrar(nombre, correo, contrasena, telefono, rol) {
-                    navController.navigate(Routes.LOGIN) {
-                        popUpTo(Routes.REGISTER) { inclusive = true }
+                listOf(
+                    "pasajero"  to Icons.Filled.Person,
+                    "conductor" to Icons.Filled.DirectionsCar
+                ).forEach { (r, icon) ->
+                    Card(
+                        onClick = { rol = r },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (rol == r)
+                                MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surface),
+                        border = if (rol == r)
+                            androidx.compose.foundation.BorderStroke(
+                                2.dp, MaterialTheme.colorScheme.primary)
+                        else androidx.compose.foundation.BorderStroke(
+                            1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp).fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(icon, null,
+                                tint = if (rol == r) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                modifier = Modifier.size(28.dp))
+                            Spacer(Modifier.height(4.dp))
+                            Text(r.replaceFirstChar { it.uppercase() },
+                                fontWeight = if (rol == r) FontWeight.Bold else FontWeight.Normal,
+                                color = if (rol == r) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text(
+                                if (r == "pasajero") "Reserva viajes"
+                                else "Publica viajes",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                        }
                     }
                 }
-            },
-            enabled = !cargando && nombre.isNotBlank()
-                    && correo.isNotBlank() && contrasena.isNotBlank(),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            if (cargando)
-                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-            else
-                Text("Registrarme", fontWeight = FontWeight.Bold)
+            }
+
+            // ── Error ─────────────────────────────────────────────
+            errorMsg?.let {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer)
+                ) {
+                    Row(modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Warning, null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(it, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            // ── Botón registrar ───────────────────────────────────
+            Button(
+                onClick = {
+                    // Validaciones
+                    when {
+                        nombre.isBlank()     -> { errorMsg = "Ingresa tu nombre"; return@Button }
+                        correo.isBlank()     -> { errorMsg = "Ingresa tu correo"; return@Button }
+                        !correo.contains("@") -> { errorMsg = "Correo inválido"; return@Button }
+                        contrasena.length < 6 -> {
+                            errorMsg = "La contraseña debe tener al menos 6 caracteres"
+                            return@Button
+                        }
+                    }
+                    errorMsg = null
+                    cargando = true
+
+                    scope.launch {
+                        try {
+                            val usuario = RetrofitClient.apiService.crearUsuario(
+                                UsuarioDTO(
+                                    nombre     = nombre,
+                                    correo     = correo.trim(),
+                                    telefono   = telefono.ifBlank { null },
+                                    contrasena = contrasena,
+                                    rol        = rol
+                                )
+                            )
+                            cargando = false
+                            Toast.makeText(context, "¡Cuenta creada! Inicia sesión",
+                                android.widget.Toast.LENGTH_SHORT).show()
+                            navController.navigate(Routes.LOGIN) {
+                                popUpTo(Routes.REGISTER) { inclusive = true }
+                            }
+                        } catch (e: Exception) {
+                            cargando = false
+                            errorMsg = when {
+                                e.message?.contains("correo") == true ->
+                                    "Este correo ya está registrado"
+                                else -> "Error al registrar: ${e.message}"
+                            }
+                        }
+                    }
+                },
+                enabled = !cargando,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                if (cargando) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        strokeWidth = 2.dp,
+                        color = androidx.compose.ui.graphics.Color.White)
+                } else {
+                    Icon(Icons.Filled.PersonAdd, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Crear cuenta", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+            }
+
+            // ── Link a login ──────────────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("¿Ya tienes cuenta? ",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                TextButton(onClick = { navController.popBackStack() }) {
+                    Text("Inicia sesión", fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary)
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
         }
-
-        Spacer(Modifier.height(12.dp))
-
-        TextButton(onClick = { navController.popBackStack() }) {
-            Text("¿Ya tienes cuenta? Inicia sesión")
-        }
-
-        Spacer(Modifier.height(24.dp))
     }
 }

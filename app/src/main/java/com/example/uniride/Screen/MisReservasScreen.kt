@@ -24,8 +24,6 @@ import com.example.uniride.ViewModel.ReservaViewModel
 import com.example.uniride.model.Reserva
 import com.example.uniride.ui.theme.Routes
 import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,12 +62,12 @@ fun MisReservasScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(if (sesion?.rol == "conductor") "Mis reservas como pasajero"
-                    else "Mis reservas")
+                    Text(
+                        if (sesion?.rol == "conductor") "Mis reservas como pasajero"
+                        else "Mis reservas"
+                    )
                 },
-                navigationIcon = null,
                 actions = {
-                    // Botón historial
                     IconButton(onClick = {
                         navController.navigate(Routes.HISTORIAL_RESERVAS)
                     }) { Icon(Icons.Filled.History, "Historial") }
@@ -104,9 +102,9 @@ fun MisReservasScreen(
                     Text("No tienes reservas activas",
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                     Spacer(Modifier.height(4.dp))
-                    TextButton(onClick = { navController.navigate(Routes.HISTORIAL_RESERVAS) }) {
-                        Text("Ver historial de reservas")
-                    }
+                    TextButton(onClick = {
+                        navController.navigate(Routes.HISTORIAL_RESERVAS)
+                    }) { Text("Ver historial de reservas") }
                 }
             }
         } else {
@@ -119,23 +117,25 @@ fun MisReservasScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 activas.forEach { reserva ->
-                    val fechaViaje = try {
-                        LocalDate.parse(reserva.viaje?.fechaHora?.take(10) ?: "")
-                    } catch (e: Exception) { null }
-                    val yaTermino = fechaViaje != null && fechaViaje.isBefore(hoy)
-                    val viajeHoy = fechaViaje == hoy
-
-                    Card(modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp)) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(),
+
+                            // Encabezado
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically) {
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text("Reserva #${reserva.idReserva}",
                                     fontWeight = FontWeight.Bold)
                                 AssistChip(onClick = {}, label = {
-                                    Text(if (reserva.confirmada) "Confirmada" else "Pendiente",
-                                        style = MaterialTheme.typography.labelSmall)
+                                    Text(
+                                        if (reserva.confirmada) "Confirmada" else "Pendiente",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
                                 })
                             }
 
@@ -159,8 +159,18 @@ fun MisReservasScreen(
                                     Text(v.fechaHora.take(16).replace("T", " "),
                                         style = MaterialTheme.typography.bodyMedium)
                                 }
+                                Spacer(Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.AttachMoney, null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("$ ${"%.0f".format(v.costo)}",
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.primary)
+                                }
 
-                                // Punto de encuentro si está confirmada
+                                // Punto de encuentro si confirmada
                                 if (reserva.confirmada && !v.descripcionPunto.isNullOrBlank()) {
                                     Spacer(Modifier.height(4.dp))
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -183,9 +193,11 @@ fun MisReservasScreen(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.Bold)
-                                    Row(modifier = Modifier.fillMaxWidth(),
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically) {
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Column {
                                             Text(v.vehiculo?.usuario?.nombre ?: "-",
                                                 style = MaterialTheme.typography.bodySmall)
@@ -199,7 +211,8 @@ fun MisReservasScreen(
                                                 val numero = telefono.filter { it.isDigit() }
                                                 val url = "https://wa.me/57$numero"
                                                 context.startActivity(
-                                                    Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                                    Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                                )
                                             }) {
                                                 Icon(Icons.Filled.Chat, "WhatsApp",
                                                     tint = MaterialTheme.colorScheme.secondary,
@@ -222,25 +235,30 @@ fun MisReservasScreen(
                                         colors = ButtonDefaults.outlinedButtonColors(
                                             contentColor = MaterialTheme.colorScheme.error)
                                     ) {
-                                        Icon(Icons.Filled.Cancel, null, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Filled.Cancel, null,
+                                            modifier = Modifier.size(16.dp))
                                         Spacer(Modifier.width(4.dp))
-                                        Text("Cancelar", style = MaterialTheme.typography.labelMedium)
+                                        Text("Cancelar",
+                                            style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
 
-                                // Calificar si terminó y está confirmada
                                 if (reserva.confirmada) {
-                                    val idConductor = reserva.viaje?.vehiculo?.usuario?.idUsuario ?: 0L
+                                    val idConductor =
+                                        reserva.viaje?.vehiculo?.usuario?.idUsuario ?: 0L
                                     Button(
                                         onClick = {
                                             navController.navigate(
-                                                "calificar/${reserva.idReserva}/$idConductor")
+                                                "calificar/${reserva.idReserva}/$idConductor"
+                                            )
                                         },
                                         modifier = Modifier.weight(1f)
                                     ) {
-                                        Icon(Icons.Filled.Star, null, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Filled.Star, null,
+                                            modifier = Modifier.size(16.dp))
                                         Spacer(Modifier.width(4.dp))
-                                        Text("Calificar", style = MaterialTheme.typography.labelMedium)
+                                        Text("Calificar",
+                                            style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
                             }
@@ -257,8 +275,10 @@ fun MisReservasScreen(
             onDismissRequest = { reservaACancelar = null },
             shape = RoundedCornerShape(20.dp),
             title = { Text("Cancelar reserva") },
-            text = { Text("¿Deseas cancelar tu reserva en el viaje de " +
-                    "${r.viaje?.origen} a ${r.viaje?.sede?.nombreSede}?") },
+            text = {
+                Text("¿Deseas cancelar tu reserva en el viaje de " +
+                        "${r.viaje?.origen} a ${r.viaje?.sede?.nombreSede}?")
+            },
             confirmButton = {
                 Button(
                     onClick = {

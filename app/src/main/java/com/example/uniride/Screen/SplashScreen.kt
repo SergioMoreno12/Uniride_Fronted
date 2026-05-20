@@ -22,8 +22,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.uniride.ViewModel.ViajeViewModel
-import com.example.uniride.ui.theme.BlueDark
-import com.example.uniride.ui.theme.BluePrimary
+import com.example.uniride.ui.theme.Blue500
+import com.example.uniride.ui.theme.Blue900
 import com.example.uniride.ui.theme.Routes
 import kotlinx.coroutines.delay
 
@@ -73,7 +73,7 @@ fun SplashScreen(navController: NavController, viajeViewModel: ViajeViewModel) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(BluePrimary, BlueDark))),
+            .background(Brush.verticalGradient(listOf(Blue500, Blue900))),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -94,37 +94,48 @@ fun SplashScreen(navController: NavController, viajeViewModel: ViajeViewModel) {
 
             Spacer(Modifier.height(24.dp))
 
-            Text("UniRide",
+            Text(
+                "UniRide",
                 style = MaterialTheme.typography.headlineLarge,
                 color = Color.White,
                 fontWeight = FontWeight.ExtraBold,
-                modifier = Modifier.alpha(alpha.value))
+                modifier = Modifier.alpha(alpha.value)
+            )
 
             Spacer(Modifier.height(4.dp))
 
-            Text("Carpooling · Universidad de Cundinamarca",
+            Text(
+                "Carpooling · Universidad de Cundinamarca",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White.copy(alpha = 0.8f),
                 textAlign = TextAlign.Center,
-                modifier = Modifier.alpha(alpha.value))
+                modifier = Modifier.alpha(alpha.value)
+            )
 
             Spacer(Modifier.height(40.dp))
 
             when (estado) {
                 ConexionEstado.VERIFICANDO -> {
-                    CircularProgressIndicator(color = Color.White,
-                        modifier = Modifier.size(32.dp), strokeWidth = 3.dp)
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(32.dp),
+                        strokeWidth = 3.dp
+                    )
                     Spacer(Modifier.height(12.dp))
-                    Text("Conectando con el servidor...",
+                    Text(
+                        "Conectando con el servidor...",
                         color = Color.White.copy(alpha = 0.8f),
-                        style = MaterialTheme.typography.bodyMedium)
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
                 ConexionEstado.OK -> {
                     Icon(Icons.Filled.CheckCircle, null,
-                        tint = Color.White, modifier = Modifier.size(36.dp))
+                        tint = Color.White,
+                        modifier = Modifier.size(36.dp))
                     Spacer(Modifier.height(8.dp))
                     Text("¡Conectado! Entrando...",
-                        color = Color.White, fontWeight = FontWeight.SemiBold)
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold)
                 }
                 ConexionEstado.ERROR -> {
                     Card(
@@ -133,28 +144,36 @@ fun SplashScreen(navController: NavController, viajeViewModel: ViajeViewModel) {
                             containerColor = Color.White.copy(alpha = 0.15f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(20.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
                             Icon(Icons.Filled.WifiOff, null,
-                                tint = Color.White, modifier = Modifier.size(40.dp))
+                                tint = Color.White,
+                                modifier = Modifier.size(40.dp))
                             Spacer(Modifier.height(12.dp))
-                            Text("Servidor despertando",
+                            Text(
+                                "Servidor despertando",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = Color.White, fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center)
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
                             Spacer(Modifier.height(8.dp))
-                            Text("El servidor está en reposo (plan gratuito de Render). " +
-                                    "Puede tardar 30-60 segundos en despertar. " +
-                                    "Pulsa Reintentar en unos segundos.",
+                            Text(
+                                "El servidor está en reposo (plan gratuito de Render). " +
+                                        "Puede tardar 30-60 segundos en despertar. " +
+                                        "Pulsa Reintentar en unos segundos.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.White.copy(alpha = 0.85f),
-                                textAlign = TextAlign.Center)
+                                textAlign = TextAlign.Center
+                            )
                             Spacer(Modifier.height(16.dp))
                             Button(
                                 onClick = { reintentando = true },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color.White,
-                                    contentColor = BluePrimary),
+                                    contentColor = Blue500),
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {

@@ -76,4 +76,9 @@ class AuthViewModel : ViewModel() {
     }
 
     fun limpiarMensaje() { _mensaje.postValue(null) }
+
+    fun actualizarSesion(nuevaSesion: LoginResponse) {
+        sesionActual = nuevaSesion
+        _loginResult.postValue(nuevaSesion)
+    }
 }

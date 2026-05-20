@@ -5,5 +5,7 @@ data class Notificacion(
     val titulo: String = "",
     val mensaje: String = "",
     val destinatarios: String = "",
+    val idUsuario: Long? = null,
+    val leida: Boolean = false,
     val fechaEnvio: String = ""
 )

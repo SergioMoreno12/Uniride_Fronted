@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.uniride.Service.SedeService
 import com.example.uniride.Service.ViajeService
 import com.example.uniride.interfaces.RetrofitClient
+import com.example.uniride.model.Reserva
 import com.example.uniride.model.Sede
 import com.example.uniride.model.Viaje
 import com.example.uniride.model.dto.ViajeDTO
@@ -24,6 +25,15 @@ class ViajeViewModel : ViewModel() {
     private val _misViajes = MutableLiveData<List<Viaje>?>(emptyList())
     val misViajes: MutableLiveData<List<Viaje>?> = _misViajes
 
+    private val _misReservasComoPassajero = MutableLiveData<List<Reserva>?>(emptyList())
+    val misReservasComoPasajero: MutableLiveData<List<Reserva>?> = _misReservasComoPassajero
+
+    private val _viajesReservados = MutableLiveData<Set<Long>>(emptySet())
+    val viajesReservados: MutableLiveData<Set<Long>> = _viajesReservados
+
+    private val _viajesPropios = MutableLiveData<Set<Long>>(emptySet())
+    val viajesPropios: MutableLiveData<Set<Long>> = _viajesPropios
+
     private val _sedes     = MutableLiveData<List<Sede>?>(emptyList())
     val sedes: MutableLiveData<List<Sede>?> = _sedes
 
@@ -33,11 +43,23 @@ class ViajeViewModel : ViewModel() {
     private val _cargando  = MutableLiveData(false)
     val cargando: MutableLiveData<Boolean> = _cargando
 
-    fun cargarDisponibles() {
+    fun cargarDisponibles(idUsuario: Long? = null) {
         viewModelScope.launch {
             _cargando.postValue(true)
             try {
                 val lista = withContext(Dispatchers.IO) { viajeService.obtenerDisponibles() }
+
+                if (idUsuario != null) {
+                    try {
+                        val reservas = withContext(Dispatchers.IO) {
+                            RetrofitClient.apiService.reservasPorUsuario(idUsuario)
+                        }
+                        val idsReservados = reservas.mapNotNull { it.viaje?.idViaje }.toSet()
+                        _viajesReservados.postValue(idsReservados)
+                        _misReservasComoPassajero.postValue(reservas)
+                    } catch (e: Exception) { }
+                }
+
                 _viajes.postValue(lista)
             } catch (e: Exception) {
                 _mensaje.postValue("Error al cargar viajes: ${e.message}")
@@ -62,6 +84,8 @@ class ViajeViewModel : ViewModel() {
                 val lista = withContext(Dispatchers.IO) {
                     viajeService.viajesPorVehiculo(idVehiculo)
                 }
+                val idsPropios = lista.map { it.idViaje }.toSet()
+                _viajesPropios.postValue(idsPropios)
                 _misViajes.postValue(lista)
             } catch (e: Exception) {
                 _mensaje.postValue("Error: ${e.message}")
@@ -79,13 +103,28 @@ class ViajeViewModel : ViewModel() {
             try {
                 withContext(Dispatchers.IO) {
                     viajeService.crearViaje(
-                        ViajeDTO(origen, destino, fechaHora, costo, "disponible", idVehiculo, idSede)
+                        ViajeDTO(origen, destino, fechaHora, null, costo,
+                            "disponible", null, idVehiculo, idSede)
                     )
                 }
                 _mensaje.postValue("¡Viaje publicado con éxito!")
-                cargarDisponibles()
             } catch (e: Exception) {
                 _mensaje.postValue("Error al publicar: ${e.message}")
+            }
+            _cargando.postValue(false)
+        }
+    }
+
+    fun publicarViajeCompleto(dto: ViajeDTO) {
+        viewModelScope.launch {
+            _cargando.postValue(true)
+            try {
+                withContext(Dispatchers.IO) {
+                    RetrofitClient.apiService.crearViaje(dto)
+                }
+                _mensaje.postValue("¡Viaje publicado con éxito!")
+            } catch (e: Exception) {
+                _mensaje.postValue(e.message ?: "Error al publicar el viaje")
             }
             _cargando.postValue(false)
         }
@@ -98,16 +137,20 @@ class ViajeViewModel : ViewModel() {
                     RetrofitClient.apiService.cancelarViaje(idViaje)
                 }
                 _mensaje.postValue("Viaje cancelado")
-                cargarDisponibles()
             } catch (e: Exception) {
                 _mensaje.postValue("Error: ${e.message}")
             }
         }
     }
 
+    // ── CORREGIDO: usa ViajeDTO en lugar de Map ────────────────────
     fun editarViaje(
-        idViaje: Long, origen: String, destino: String,
-        fechaHora: String, costo: Double, idSede: Long
+        idViaje: Long,
+        origen: String,
+        destino: String,
+        fechaHora: String,
+        costo: Double,
+        idSede: Long
     ) {
         viewModelScope.launch {
             _cargando.postValue(true)
@@ -115,12 +158,16 @@ class ViajeViewModel : ViewModel() {
                 withContext(Dispatchers.IO) {
                     RetrofitClient.apiService.editarViaje(
                         idViaje,
-                        mapOf(
-                            "origen"    to origen,
-                            "destino"   to destino,
-                            "fechaHora" to fechaHora,
-                            "costo"     to costo,
-                            "idSede"    to idSede
+                        ViajeDTO(
+                            origen           = origen,
+                            destino          = destino,
+                            fechaHora        = fechaHora,
+                            horaLlegada      = null,
+                            costo            = costo,
+                            estado           = "disponible",
+                            descripcionPunto = null,
+                            idVehiculo       = 0L,
+                            idSede           = idSede
                         )
                     )
                 }

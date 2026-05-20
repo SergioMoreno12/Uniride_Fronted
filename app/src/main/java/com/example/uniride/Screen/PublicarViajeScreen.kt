@@ -18,35 +18,50 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ViewModel.ViajeViewModel
-import com.example.uniride.model.Sede
+import com.example.uniride.interfaces.RetrofitClient
+import com.example.uniride.model.dto.ViajeDTO
 import com.example.uniride.ui.theme.Routes
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PublicarViajeScreen(
     navController: NavController,
-    authViewModel: AuthViewModel  = viewModel(),
+    authViewModel: AuthViewModel   = viewModel(),
     viajeViewModel: ViajeViewModel = viewModel()
 ) {
     val sesion   = authViewModel.sesionActual
     val sedes    by viajeViewModel.sedes.observeAsState(emptyList())
-    val cargando by viajeViewModel.cargando.observeAsState(false)
     val mensaje  by viajeViewModel.mensaje.observeAsState(null)
-    val context = LocalContext.current
+    val cargando by viajeViewModel.cargando.observeAsState(false)
+    val context  = LocalContext.current
+    val scope    = rememberCoroutineScope()
 
-    var origen    by remember { mutableStateOf("") }
-    var destino   by remember { mutableStateOf("") }
-    var fechaHora by remember { mutableStateOf("") }
-    var costo     by remember { mutableStateOf("") }
-    var idVehiculo by remember { mutableStateOf("") }
-    var sedeSeleccionada by remember { mutableStateOf<Sede?>(null) }
+    var ciudadOrigen    by remember { mutableStateOf("") }
+    var fechaHora       by remember { mutableStateOf("") }
+    var horaSalida      by remember { mutableStateOf("06:00") }
+    var horaLlegada     by remember { mutableStateOf("07:00") }
+    var costo           by remember { mutableStateOf("") }
+    var descripcionPunto by remember { mutableStateOf("") }
+    var sedeSeleccionada by remember { mutableStateOf<com.example.uniride.model.Sede?>(null) }
+    var idVehiculo      by remember { mutableStateOf<Long?>(null) }
+    var error           by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(true) { viajeViewModel.cargarSedes() }
+    LaunchedEffect(true) {
+        viajeViewModel.cargarSedes()
+        sesion?.idUsuario?.let { id ->
+            try {
+                val vehiculos = RetrofitClient.apiService.vehiculosPorUsuario(id)
+                idVehiculo = vehiculos.firstOrNull()?.idVehiculo
+            } catch (e: Exception) { }
+        }
+    }
+
     LaunchedEffect(mensaje) {
         mensaje?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
             viajeViewModel.limpiarMensaje()
-            if (it.contains("éxito")) navController.navigate(Routes.HOME) {
+            if (it.contains("éxito")) navController.navigate(Routes.MIS_VIAJES) {
                 popUpTo(Routes.PUBLICAR) { inclusive = true }
             }
         }
@@ -54,14 +69,16 @@ fun PublicarViajeScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Publicar viaje") },
+            TopAppBar(
+                title = { Text("Publicar viaje") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Filled.ArrowBack, null)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface))
+                    containerColor = MaterialTheme.colorScheme.surface)
+            )
         },
         bottomBar = {
             BottomNavBar(currentRoute = "publicar", rol = "conductor") { route ->
@@ -80,55 +97,123 @@ fun PublicarViajeScreen(
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("Datos del viaje", fontWeight = FontWeight.Bold,
+            if (idVehiculo == null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer)
+                ) {
+                    Row(modifier = Modifier.padding(16.dp)) {
+                        Icon(Icons.Filled.Warning, null,
+                            tint = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.width(8.dp))
+                        androidx.compose.material3.Text(
+                            "Primero debes registrar tu vehículo en Mi perfil → Mi vehículo",
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+
+            Text("Ruta del viaje", fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary)
 
-            TextField(origen, { origen = it }, label = { Text("Punto de salida") },
-                leadingIcon = { Icon(Icons.Filled.LocationOn, null) },
-                singleLine = true, modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp))
-
-            TextField(destino, { destino = it }, label = { Text("Destino (dirección)") },
+            // Ciudad de origen
+            TextField(ciudadOrigen, { ciudadOrigen = it },
+                label = { Text("Ciudad de origen") },
                 leadingIcon = { Icon(Icons.Filled.LocationCity, null) },
+                placeholder = { Text("Ej: Bogotá, Fusagasugá...") },
                 singleLine = true, modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp))
 
+            // Sede destino
             SedeDropdown(
                 sedes = sedes ?: emptyList(),
                 seleccionada = sedeSeleccionada,
                 onSelect = { sedeSeleccionada = it }
             )
 
+            HorizontalDivider()
+            Text("Fecha y hora", fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary)
+
             DateTimePickerField(
-                label = "Fecha de salida",
+                label = "Fecha del viaje",
                 value = fechaHora.take(10),
                 onDateSelected = { fechaHora = it },
                 modifier = Modifier.fillMaxWidth()
             )
 
-            TextField(costo, { costo = it }, label = { Text("Costo por puesto ($)") },
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                TextField(horaSalida, { horaSalida = it },
+                    label = { Text("Hora salida") },
+                    leadingIcon = { Icon(Icons.Filled.AccessTime, null) },
+                    placeholder = { Text("06:00") },
+                    singleLine = true, modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp))
+
+                TextField(horaLlegada, { horaLlegada = it },
+                    label = { Text("Hora llegada") },
+                    leadingIcon = { Icon(Icons.Filled.AccessTime, null) },
+                    placeholder = { Text("07:00") },
+                    singleLine = true, modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp))
+            }
+
+            HorizontalDivider()
+            Text("Detalles del viaje", fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary)
+
+            TextField(costo, { costo = it },
+                label = { Text("Costo por puesto ($)") },
                 leadingIcon = { Icon(Icons.Filled.AttachMoney, null) },
                 singleLine = true, modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp))
 
-            TextField(idVehiculo, { idVehiculo = it }, label = { Text("ID del vehículo") },
-                leadingIcon = { Icon(Icons.Filled.DirectionsCar, null) },
-                singleLine = true, modifier = Modifier.fillMaxWidth(),
+            TextField(descripcionPunto, { descripcionPunto = it },
+                label = { Text("Punto de encuentro") },
+                leadingIcon = { Icon(Icons.Filled.Place, null) },
+                placeholder = { Text("Describe el punto de encuentro exacto...") },
+                maxLines = 3, modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp))
 
-            Spacer(Modifier.height(4.dp))
+            error?.let {
+                Text(it, color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall)
+            }
+
+            Spacer(Modifier.height(8.dp))
 
             Button(
                 onClick = {
-                    viajeViewModel.publicarViaje(
-                        origen, destino, fechaHora,
-                        costo.toDoubleOrNull() ?: 0.0,
-                        idVehiculo.toLongOrNull() ?: 0L,
-                        sedeSeleccionada?.idSede ?: 0L
-                    )
+                    if (ciudadOrigen.isBlank()) { error = "Ingresa la ciudad de origen"; return@Button }
+                    if (sedeSeleccionada == null) { error = "Selecciona la sede destino"; return@Button }
+                    if (fechaHora.isBlank()) { error = "Selecciona una fecha"; return@Button }
+                    if (costo.isBlank()) { error = "Ingresa el costo"; return@Button }
+                    if (idVehiculo == null) { error = "Registra tu vehículo primero"; return@Button }
+
+                    error = null
+                    val fechaSalida   = "${fechaHora.take(10)}T$horaSalida:00"
+                    val fechaLlegada  = "${fechaHora.take(10)}T$horaLlegada:00"
+
+                    scope.launch {
+                        viajeViewModel.publicarViajeCompleto(
+                            dto = ViajeDTO(
+                                origen           = ciudadOrigen,
+                                destino          = sedeSeleccionada!!.nombreSede,
+                                fechaHora        = fechaSalida,
+                                horaLlegada      = fechaLlegada,
+                                costo            = costo.toDoubleOrNull() ?: 0.0,
+                                estado           = "disponible",
+                                descripcionPunto = descripcionPunto.ifBlank { null },
+                                idVehiculo       = idVehiculo!!,
+                                idSede           = sedeSeleccionada!!.idSede
+                            )
+                        )
+                    }
                 },
-                enabled = !cargando && origen.isNotBlank() && fechaHora.isNotBlank()
-                        && costo.isNotBlank() && idVehiculo.isNotBlank() && sedeSeleccionada != null,
+                enabled = !cargando && idVehiculo != null,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {

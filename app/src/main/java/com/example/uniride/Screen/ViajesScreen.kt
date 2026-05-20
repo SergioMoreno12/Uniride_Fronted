@@ -13,32 +13,51 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ViewModel.ViajeViewModel
-import com.example.uniride.ui.theme.Routes
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ViajesScreen(
     navController: NavController,
-    viajeViewModel: ViajeViewModel = viewModel()
+    viajeViewModel: ViajeViewModel = viewModel(),
+    authViewModel: AuthViewModel   = viewModel()
 ) {
-    var busqueda by remember { mutableStateOf("") }
-    val viajes   by viajeViewModel.viajes.observeAsState(emptyList())
-    val cargando by viajeViewModel.cargando.observeAsState(false)
+    var busqueda         by remember { mutableStateOf("") }
+    val viajes           by viajeViewModel.viajes.observeAsState(emptyList())
+    val cargando         by viajeViewModel.cargando.observeAsState(false)
+    val viajesReservados by viajeViewModel.viajesReservados.observeAsState(emptySet())
+    val viajesPropios    by viajeViewModel.viajesPropios.observeAsState(emptySet())
+    val sesion           = authViewModel.sesionActual
 
-    val filtrados = (viajes ?: emptyList()).filter {
-        it.origen.contains(busqueda, ignoreCase = true) ||
-                it.sede?.nombreSede?.contains(busqueda, ignoreCase = true) == true ||
-                it.sede?.ciudad?.contains(busqueda, ignoreCase = true) == true
+    LaunchedEffect(true) {
+        viajeViewModel.cargarDisponibles(sesion?.idUsuario)
     }
 
-    LaunchedEffect(true) { viajeViewModel.cargarDisponibles() }
+    // Filtrar: sin los ya reservados, sin los propios, y por búsqueda
+    val filtrados = (viajes ?: emptyList()).filter { viaje ->
+        val yaReservo = viaje.idViaje in (viajesReservados ?: emptySet())
+        val esPropio  = viaje.idViaje in (viajesPropios ?: emptySet())
+        val coincide  = viaje.origen.contains(busqueda, ignoreCase = true) ||
+                viaje.sede?.nombreSede?.contains(busqueda, ignoreCase = true) == true ||
+                viaje.sede?.ciudad?.contains(busqueda, ignoreCase = true) == true
+        !yaReservo && !esPropio && coincide
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Buscar viajes") },
+            TopAppBar(
+                title = { Text("Buscar viajes") },
+                actions = {
+                    IconButton(onClick = {
+                        viajeViewModel.cargarDisponibles(sesion?.idUsuario)
+                    }) {
+                        Icon(Icons.Filled.Refresh, "Actualizar")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface))
+                    containerColor = MaterialTheme.colorScheme.surface)
+            )
         }
     ) { padding ->
         Column(
@@ -53,13 +72,15 @@ fun ViajesScreen(
                 leadingIcon = { Icon(Icons.Filled.Search, null) },
                 trailingIcon = {
                     if (busqueda.isNotEmpty())
-                        IconButton(onClick = { busqueda = "" }) { Icon(Icons.Filled.Clear, null) }
+                        IconButton(onClick = { busqueda = "" }) {
+                            Icon(Icons.Filled.Clear, null)
+                        }
                 },
-                singleLine = true, modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
             )
-
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
 
             if (cargando) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -73,7 +94,7 @@ fun ViajesScreen(
                     if (filtrados.isEmpty()) {
                         Box(Modifier.fillMaxWidth().padding(top = 48.dp),
                             contentAlignment = Alignment.Center) {
-                            Text("No se encontraron viajes",
+                            Text("No se encontraron viajes disponibles",
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                         }
                     } else {

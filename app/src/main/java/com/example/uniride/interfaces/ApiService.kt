@@ -9,11 +9,9 @@ import retrofit2.http.*
 
 interface ApiService {
 
-    // ===== AUTH =====
     @POST("/api/auth/login")
     suspend fun login(@Body request: LoginRequest): Response<LoginResponse>
 
-    // ===== USUARIOS =====
     @GET("/api/usuarios")
     suspend fun obtenerUsuarios(): List<Usuario>
 
@@ -50,7 +48,6 @@ interface ApiService {
     @DELETE("/api/usuarios/{id}")
     suspend fun eliminarUsuario(@Path("id") id: Long)
 
-    // ===== SEDES =====
     @GET("/api/sedes")
     suspend fun obtenerSedes(): List<Sede>
 
@@ -60,7 +57,6 @@ interface ApiService {
     @DELETE("/api/sedes/{id}")
     suspend fun eliminarSede(@Path("id") id: Long)
 
-    // ===== VEHICULOS =====
     @GET("/api/vehiculos")
     suspend fun obtenerVehiculos(): List<Vehiculo>
 
@@ -70,12 +66,20 @@ interface ApiService {
     @POST("/api/vehiculos")
     suspend fun crearVehiculo(@Body dto: VehiculoDTO): Vehiculo
 
+    @PUT("/api/vehiculos/{id}")
+    suspend fun editarVehiculo(
+        @Path("id") id: Long,
+        @Body dto: VehiculoDTO
+    ): Vehiculo
+
     @DELETE("/api/vehiculos/{id}")
     suspend fun eliminarVehiculo(@Path("id") id: Long)
 
-    // ===== VIAJES =====
     @GET("/api/viajes")
     suspend fun obtenerViajes(): List<Viaje>
+
+    @GET("/api/viajes/{id}")
+    suspend fun obtenerViaje(@Path("id") id: Long): Viaje
 
     @GET("/api/viajes/estado/{estado}")
     suspend fun viajesPorEstado(@Path("estado") estado: String): List<Viaje>
@@ -83,11 +87,17 @@ interface ApiService {
     @GET("/api/viajes/vehiculo/{idVehiculo}")
     suspend fun viajesPorVehiculo(@Path("idVehiculo") id: Long): List<Viaje>
 
+    @GET("/api/viajes/sede/{idSede}")
+    suspend fun viajesPorSede(@Path("idSede") id: Long): List<Viaje>
+
+    @GET("/api/viajes/ciudad/{ciudad}")
+    suspend fun viajesPorCiudad(@Path("ciudad") ciudad: String): List<Viaje>
+
     @POST("/api/viajes")
     suspend fun crearViaje(@Body dto: ViajeDTO): Viaje
 
     @PUT("/api/viajes/{id}")
-    suspend fun editarViaje(@Path("id") id: Long, @Body body: Map<String, Any>): Viaje
+    suspend fun editarViaje(@Path("id") id: Long, @Body dto: ViajeDTO): Viaje
 
     @DELETE("/api/viajes/{id}")
     suspend fun eliminarViaje(@Path("id") id: Long)
@@ -95,7 +105,6 @@ interface ApiService {
     @PATCH("/api/viajes/{id}/cancelar")
     suspend fun cancelarViaje(@Path("id") id: Long): Viaje
 
-    // ===== RESERVAS =====
     @GET("/api/reservas")
     suspend fun obtenerReservas(): List<Reserva>
 
@@ -114,7 +123,6 @@ interface ApiService {
     @PATCH("/api/reservas/{id}/cancelar")
     suspend fun cancelarReserva(@Path("id") id: Long): String
 
-    // ===== REPORTES =====
     @GET("/api/reportes")
     suspend fun obtenerReportes(): List<Reporte>
 
@@ -124,16 +132,23 @@ interface ApiService {
         @Body body: Map<String, String>
     ): Reporte
 
-    // ===== NOTIFICACIONES =====
     @GET("/api/notificaciones")
     suspend fun obtenerNotificaciones(): List<Notificacion>
+
+    @GET("/api/notificaciones/usuario/{idUsuario}")
+    suspend fun notificacionesPorUsuario(@Path("idUsuario") id: Long): List<Notificacion>
 
     @POST("/api/notificaciones")
     suspend fun crearNotificacion(@Body body: Map<String, String>): Notificacion
 
-    // ===== CALIFICACIONES =====
+    @PATCH("/api/notificaciones/{id}/leer")
+    suspend fun marcarLeida(@Path("id") id: Long)
+
     @POST("/api/calificaciones")
     suspend fun calificarConductor(@Body body: Map<String, Any>): Any
+
+    @GET("/api/calificaciones/conductor/{idConductor}")
+    suspend fun calificacionesConductor(@Path("idConductor") id: Long): List<Calificacion>
 
     @GET("/api/calificaciones/conductor/{idConductor}/promedio")
     suspend fun promedioConductor(@Path("idConductor") id: Long): Double

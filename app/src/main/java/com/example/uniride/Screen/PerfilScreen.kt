@@ -1,6 +1,5 @@
 package com.example.uniride.Screen
 
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -15,16 +14,17 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ViewModel.PerfilViewModel
+import com.example.uniride.interfaces.RetrofitClient
 import com.example.uniride.ui.theme.Routes
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,34 +34,23 @@ fun PerfilScreen(
     perfilViewModel: PerfilViewModel = viewModel()
 ) {
     val sesion        = authViewModel.sesionActual
-    val cargando      by perfilViewModel.cargando.observeAsState(false)
-    val mensaje       by perfilViewModel.mensaje.observeAsState(null)
     val perfilUsuario by perfilViewModel.perfilUsuario.observeAsState(null)
-    val context       = LocalContext.current
+    val scope         = rememberCoroutineScope()
+    var promedio      by remember { mutableStateOf(0.0) }
 
-    var nombre          by remember { mutableStateOf("") }
-    var telefono        by remember { mutableStateOf("") }
-    var claveActual     by remember { mutableStateOf("") }
-    var claveNueva      by remember { mutableStateOf("") }
-    var tabSeleccionada by remember { mutableIntStateOf(0) }
-
-    // Cargar perfil completo al abrir la pantalla
     LaunchedEffect(sesion?.idUsuario) {
-        sesion?.idUsuario?.let { perfilViewModel.cargarPerfil(it) }
-    }
-
-    // Cuando llega el perfil desde el backend, inicializa los campos
-    LaunchedEffect(perfilUsuario) {
-        perfilUsuario?.let {
-            nombre   = it.nombre
-            telefono = it.telefono ?: ""
-        }
-    }
-
-    LaunchedEffect(mensaje) {
-        mensaje?.let {
-            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
-            perfilViewModel.limpiarMensaje()
+        sesion?.idUsuario?.let { id ->
+            perfilViewModel.cargarPerfil(id)
+            if (sesion.rol == "conductor") {
+                scope.launch {
+                    try {
+                        val vehiculos = RetrofitClient.apiService.vehiculosPorUsuario(id)
+                        vehiculos.firstOrNull()?.let { v ->
+                            promedio = RetrofitClient.apiService.promedioConductor(id)
+                        }
+                    } catch (e: Exception) { }
+                }
+            }
         }
     }
 
@@ -69,6 +58,11 @@ fun PerfilScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Mi perfil") },
+                actions = {
+                    IconButton(onClick = { navController.navigate(Routes.AJUSTES) }) {
+                        Icon(Icons.Filled.Settings, "Ajustes")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface)
             )
@@ -92,18 +86,18 @@ fun PerfilScreen(
         ) {
             Spacer(Modifier.height(24.dp))
 
-            // ── Avatar ─────────────────────────────────────────────────────
+            // Avatar
             Box(
                 modifier = Modifier
-                    .size(80.dp)
+                    .size(90.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    nombre.firstOrNull()?.uppercaseChar()?.toString() ?: "U",
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold,
+                    perfilUsuario?.nombre?.first()?.uppercaseChar()?.toString()
+                        ?: sesion?.nombre?.first()?.uppercaseChar()?.toString() ?: "U",
+                    fontSize = 36.sp, fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
@@ -111,155 +105,96 @@ fun PerfilScreen(
             Spacer(Modifier.height(8.dp))
 
             Text(
-                nombre.ifBlank { sesion?.nombre ?: "Usuario" },
+                perfilUsuario?.nombre ?: sesion?.nombre ?: "Usuario",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
 
             Text(
-                when (sesion?.rol) {
+                when (perfilUsuario?.rol ?: sesion?.rol) {
                     "conductor"     -> "Conductor"
                     "administrador" -> "Administrador"
                     else            -> "Pasajero"
                 },
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
             )
 
-            Spacer(Modifier.height(20.dp))
-
-            // ── Tabs ───────────────────────────────────────────────────────
-            TabRow(selectedTabIndex = tabSeleccionada) {
-                Tab(
-                    selected = tabSeleccionada == 0,
-                    onClick  = { tabSeleccionada = 0 },
-                    text     = { Text("Perfil") }
-                )
-                Tab(
-                    selected = tabSeleccionada == 1,
-                    onClick  = { tabSeleccionada = 1 },
-                    text     = { Text("Contraseña") }
-                )
+            // Estrellas promedio para conductores
+            if ((perfilUsuario?.rol ?: sesion?.rol) == "conductor" && promedio > 0) {
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center) {
+                    (1..5).forEach { i ->
+                        Icon(
+                            if (i <= promedio.toInt()) Icons.Filled.Star else Icons.Filled.StarBorder,
+                            null,
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    Text("${"%.1f".format(promedio)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        fontWeight = FontWeight.Bold)
+                }
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(24.dp))
 
-            when (tabSeleccionada) {
-
-                // ── Tab Perfil ─────────────────────────────────────────────
-                0 -> {
-                    if (cargando && perfilUsuario == null) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().height(120.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
-                    } else {
-                        TextField(
-                            value = nombre,
-                            onValueChange = { nombre = it },
-                            label = { Text("Nombre completo") },
-                            leadingIcon = { Icon(Icons.Filled.Person, null) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        TextField(
-                            value = telefono,
-                            onValueChange = { telefono = it },
-                            label = { Text("Teléfono") },
-                            leadingIcon = { Icon(Icons.Filled.Phone, null) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        Spacer(Modifier.height(20.dp))
-                        Button(
-                            onClick = {
-                                sesion?.idUsuario?.let {
-                                    perfilViewModel.actualizarPerfil(it, nombre, telefono)
-                                }
-                            },
-                            enabled = !cargando && nombre.isNotBlank(),
-                            modifier = Modifier.fillMaxWidth().height(52.dp),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            if (cargando)
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                            else Text("Guardar cambios", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-
-                // ── Tab Contraseña ─────────────────────────────────────────
-                1 -> {
-                    TextField(
-                        value = claveActual,
-                        onValueChange = { claveActual = it },
-                        label = { Text("Contraseña actual") },
-                        leadingIcon = { Icon(Icons.Filled.Lock, null) },
-                        visualTransformation = PasswordVisualTransformation(),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    TextField(
-                        value = claveNueva,
-                        onValueChange = { claveNueva = it },
-                        label = { Text("Nueva contraseña") },
-                        leadingIcon = { Icon(Icons.Filled.LockOpen, null) },
-                        visualTransformation = PasswordVisualTransformation(),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    Spacer(Modifier.height(20.dp))
-                    Button(
-                        onClick = {
-                            sesion?.idUsuario?.let {
-                                perfilViewModel.cambiarContrasena(it, claveActual, claveNueva)
-                                claveActual = ""
-                                claveNueva  = ""
-                            }
-                        },
-                        enabled = !cargando && claveActual.isNotBlank() && claveNueva.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        if (cargando)
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                        else Text("Cambiar contraseña", fontWeight = FontWeight.Bold)
-                    }
+            // Datos del usuario
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                Column(modifier = Modifier.padding(8.dp)) {
+                    InfoRow(Icons.Filled.Person,  "Nombre",   perfilUsuario?.nombre ?: "-")
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    InfoRow(Icons.Filled.Email,   "Correo",   perfilUsuario?.correo ?: "-")
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    InfoRow(Icons.Filled.Phone,   "Teléfono", perfilUsuario?.telefono ?: "No registrado")
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    InfoRow(Icons.Filled.Badge,   "Rol",
+                        when (perfilUsuario?.rol) {
+                            "conductor"     -> "Conductor"
+                            "administrador" -> "Administrador"
+                            else            -> "Pasajero"
+                        })
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    InfoRow(Icons.Filled.CalendarToday, "Miembro desde",
+                        perfilUsuario?.fechaRegistro?.take(10) ?: "-")
                 }
             }
 
             Spacer(Modifier.height(20.dp))
 
-            // ── Botón Mis vehículos (solo conductores) ─────────────────────
-            if (sesion?.rol == "conductor") {
+            // Botones de acción
+            Button(
+                onClick = { navController.navigate(Routes.EDITAR_PERFIL) },
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Filled.Edit, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Editar perfil", fontWeight = FontWeight.Bold)
+            }
+
+            if ((perfilUsuario?.rol ?: sesion?.rol) == "conductor") {
+                Spacer(Modifier.height(10.dp))
                 OutlinedButton(
-                    onClick = { navController.navigate(Routes.REGISTRAR_VEHICULO) },
+                    onClick = { navController.navigate(Routes.MI_VEHICULO) },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Filled.DirectionsCar, null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Mis vehículos", fontWeight = FontWeight.Bold)
+                    Text("Mi vehículo", fontWeight = FontWeight.Bold)
                 }
-                Spacer(Modifier.height(8.dp))
             }
 
-            // ── Cerrar sesión ──────────────────────────────────────────────
+            Spacer(Modifier.height(10.dp))
             OutlinedButton(
                 onClick = {
                     authViewModel.cerrarSesion()
-                    navController.navigate(Routes.LOGIN) {
-                        popUpTo(0) { inclusive = true }
-                    }
+                    navController.navigate(Routes.LOGIN) { popUpTo(0) { inclusive = true } }
                 },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(12.dp),
@@ -272,6 +207,20 @@ fun PerfilScreen(
             }
 
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun InfoRow(icon: ImageVector, label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(label, style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            Text(value, fontWeight = FontWeight.SemiBold)
         }
     }
 }

@@ -252,4 +252,19 @@ class AdminViewModel : ViewModel() {
     }
 
     fun limpiarMensaje() { _mensaje.postValue(null) }
+
+    fun cambiarRol(idUsuario: Long, nuevoRol: String) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    RetrofitClient.apiService.actualizarUsuario(
+                        idUsuario, mapOf("rol" to nuevoRol))
+                }
+                _mensaje.postValue("Rol actualizado a $nuevoRol")
+                cargarUsuarios()
+            } catch (e: Exception) {
+                _mensaje.postValue("Error: ${e.message}")
+            }
+        }
+    }
 }

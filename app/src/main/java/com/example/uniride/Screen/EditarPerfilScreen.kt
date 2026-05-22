@@ -31,9 +31,6 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ViewModel.PerfilViewModel
-import com.example.uniride.model.dto.LoginResponse
-import com.example.uniride.ui.theme.Routes
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,13 +44,11 @@ fun EditarPerfilScreen(
     val cargando      by perfilViewModel.cargando.observeAsState(false)
     val mensaje       by perfilViewModel.mensaje.observeAsState(null)
     val context       = LocalContext.current
-    val scope         = rememberCoroutineScope()
 
     var nombre      by remember { mutableStateOf("") }
     var telefono    by remember { mutableStateOf("") }
     var claveActual by remember { mutableStateOf("") }
     var claveNueva  by remember { mutableStateOf("") }
-    var rolSel      by remember { mutableStateOf("pasajero") }
     var fotoUri     by remember { mutableStateOf<Uri?>(null) }
     var tab         by remember { mutableIntStateOf(0) }
 
@@ -62,47 +57,16 @@ fun EditarPerfilScreen(
     ) { uri -> fotoUri = uri }
 
     LaunchedEffect(perfilUsuario) {
-        perfilUsuario?.let {
-            nombre   = it.nombre
-            telefono = it.telefono ?: ""
-            rolSel   = it.rol
-        }
+        perfilUsuario?.let { nombre = it.nombre; telefono = it.telefono ?: "" }
     }
-
     LaunchedEffect(sesion?.idUsuario) {
         sesion?.idUsuario?.let { perfilViewModel.cargarPerfil(it) }
     }
-
-    // Cuando se guarda con éxito, actualiza sesión y navega según nuevo rol
-    var rolGuardado by remember { mutableStateOf<String?>(null) }
-
     LaunchedEffect(mensaje) {
         mensaje?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
             perfilViewModel.limpiarMensaje()
-            if (it.contains("éxito")) {
-                rolGuardado?.let { rol ->
-                    // Actualizar sesión con nuevo rol
-                    val nuevaSesion = LoginResponse(
-                        mensaje    = "ok",
-                        rol        = rol,
-                        idUsuario  = sesion?.idUsuario ?: 0,
-                        nombre     = nombre,
-                        fotoPerfil = sesion?.fotoPerfil
-                    )
-                    authViewModel.actualizarSesion(nuevaSesion)
-
-                    // Navegar a pantalla principal del nuevo rol
-                    when (rol) {
-                        "conductor" -> navController.navigate(Routes.MIS_VIAJES) {
-                            popUpTo(0) { inclusive = false }
-                        }
-                        else -> navController.navigate(Routes.HOME) {
-                            popUpTo(0) { inclusive = false }
-                        }
-                    }
-                } ?: navController.popBackStack()
-            }
+            if (it.contains("éxito")) navController.popBackStack()
         }
     }
 
@@ -129,24 +93,24 @@ fun EditarPerfilScreen(
         ) {
             Spacer(Modifier.height(16.dp))
 
+            // Solo dos pestañas: Datos y Contraseña
             TabRow(selectedTabIndex = tab) {
                 Tab(selected = tab == 0, onClick = { tab = 0 },
-                    text = { Text("Datos") })
+                    text = { Text("Datos personales") })
                 Tab(selected = tab == 1, onClick = { tab = 1 },
                     text = { Text("Contraseña") })
-                Tab(selected = tab == 2, onClick = { tab = 2 },
-                    text = { Text("Rol") })
             }
 
             Spacer(Modifier.height(20.dp))
 
             when (tab) {
 
-                // ── Datos personales + foto ────────────────────────
+                // ── Datos personales + foto ────────────────────────────
                 0 -> {
                     // Foto de perfil
                     Box(contentAlignment = Alignment.BottomEnd,
                         modifier = Modifier.align(Alignment.CenterHorizontally)) {
+
                         if (fotoUri != null) {
                             AsyncImage(
                                 model = fotoUri,
@@ -171,9 +135,11 @@ fun EditarPerfilScreen(
                                     .clickable { imagePickerLauncher.launch("image/*") },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(nombre.firstOrNull()?.uppercaseChar()?.toString() ?: "U",
+                                Text(
+                                    nombre.firstOrNull()?.uppercaseChar()?.toString() ?: "U",
                                     fontSize = 36.sp, fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary)
+                                    color = MaterialTheme.colorScheme.primary
+                                )
                             }
                         }
                         SmallFloatingActionButton(
@@ -182,7 +148,8 @@ fun EditarPerfilScreen(
                             modifier = Modifier.size(28.dp)
                         ) {
                             Icon(Icons.Filled.CameraAlt, null,
-                                modifier = Modifier.size(14.dp), tint = androidx.compose.ui.graphics.Color.White)
+                                modifier = Modifier.size(14.dp),
+                                tint = androidx.compose.ui.graphics.Color.White)
                         }
                     }
 
@@ -202,13 +169,14 @@ fun EditarPerfilScreen(
                     Spacer(Modifier.height(20.dp))
                     Button(
                         onClick = {
-                            rolGuardado = null
-                            // Convertir Uri a base64 o string si es necesario
-                            // Por ahora guardamos la URI como string
                             val fotoStr = fotoUri?.toString()
+                                ?: perfilUsuario?.fotoPerfil
                             sesion?.idUsuario?.let {
-                                perfilViewModel.actualizarPerfil(it, nombre, telefono,
+                                perfilViewModel.actualizarPerfil(
+                                    it, nombre, telefono,
                                     fotoPerfil = fotoStr)
+                                // Actualizar foto en sesión local
+                                fotoStr?.let { f -> authViewModel.actualizarFoto(f) }
                             }
                         },
                         enabled = !cargando && nombre.isNotBlank(),
@@ -217,11 +185,11 @@ fun EditarPerfilScreen(
                     ) {
                         if (cargando) CircularProgressIndicator(
                             modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                        else Text("Guardar datos", fontWeight = FontWeight.Bold)
+                        else Text("Guardar cambios", fontWeight = FontWeight.Bold)
                     }
                 }
 
-                // ── Contraseña ─────────────────────────────────────
+                // ── Contraseña ─────────────────────────────────────────
                 1 -> {
                     TextField(claveActual, { claveActual = it },
                         label = { Text("Contraseña actual") },
@@ -239,7 +207,6 @@ fun EditarPerfilScreen(
                     Spacer(Modifier.height(20.dp))
                     Button(
                         onClick = {
-                            rolGuardado = null
                             sesion?.idUsuario?.let {
                                 perfilViewModel.cambiarContrasena(it, claveActual, claveNueva)
                                 claveActual = ""; claveNueva = ""
@@ -252,95 +219,6 @@ fun EditarPerfilScreen(
                         if (cargando) CircularProgressIndicator(
                             modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                         else Text("Cambiar contraseña", fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                // ── Cambiar rol ────────────────────────────────────
-                2 -> {
-                    Text("Selecciona cómo quieres usar la app:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(16.dp))
-
-                    Row(modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        listOf(
-                            "pasajero"  to Icons.Filled.Person,
-                            "conductor" to Icons.Filled.DirectionsCar
-                        ).forEach { (rol, icon) ->
-                            Card(
-                                onClick = { rolSel = rol },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (rolSel == rol)
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    else MaterialTheme.colorScheme.surface),
-                                border = if (rolSel == rol)
-                                    androidx.compose.foundation.BorderStroke(
-                                        2.dp, MaterialTheme.colorScheme.primary)
-                                else androidx.compose.foundation.BorderStroke(
-                                    1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                                    horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(icon, null,
-                                        tint = if (rolSel == rol) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                                        modifier = Modifier.size(32.dp))
-                                    Spacer(Modifier.height(6.dp))
-                                    Text(rol.replaceFirstChar { it.uppercase() },
-                                        fontWeight = if (rolSel == rol) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (rolSel == rol) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                                    Text(if (rol == "pasajero") "Busca y reserva"
-                                    else "Publica viajes",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(12.dp))
-
-                    if (sesion?.rol != rolSel) {
-                        Card(modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
-                            Row(modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.Info, null,
-                                    tint = MaterialTheme.colorScheme.tertiary)
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    if (rolSel == "conductor")
-                                        "Cambiarás a Conductor. Verás tus viajes publicados."
-                                    else "Cambiarás a Pasajero. Verás viajes disponibles.",
-                                    style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                        Spacer(Modifier.height(12.dp))
-                    }
-
-                    Button(
-                        onClick = {
-                            rolGuardado = rolSel
-                            sesion?.idUsuario?.let { id ->
-                                perfilViewModel.actualizarPerfil(
-                                    id,
-                                    nombre.ifBlank { sesion.nombre },
-                                    telefono,
-                                    rol = rolSel
-                                )
-                            }
-                        },
-                        enabled = !cargando,
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Guardar rol y continuar", fontWeight = FontWeight.Bold)
                     }
                 }
             }

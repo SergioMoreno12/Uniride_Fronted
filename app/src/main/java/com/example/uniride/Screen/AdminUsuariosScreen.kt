@@ -3,10 +3,10 @@ package com.example.uniride.Screen
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,22 +25,20 @@ import com.example.uniride.model.Usuario
 @Composable
 fun AdminUsuariosScreen(
     navController: NavController,
-    viewModel: AdminViewModel = viewModel()
+    adminViewModel: AdminViewModel = viewModel()
 ) {
-    val usuarios by viewModel.usuarios.observeAsState(emptyList())
-    val cargando by viewModel.cargando.observeAsState(false)
-    val mensaje  by viewModel.mensaje.observeAsState(null)
+    val usuarios by adminViewModel.usuarios.observeAsState(emptyList())
+    val cargando by adminViewModel.cargando.observeAsState(false)
+    val mensaje  by adminViewModel.mensaje.observeAsState(null)
     val context  = LocalContext.current
-
-    var busqueda         by remember { mutableStateOf("") }
+    var busqueda by remember { mutableStateOf("") }
     var usuarioAEliminar by remember { mutableStateOf<Usuario?>(null) }
-    var usuarioRol       by remember { mutableStateOf<Usuario?>(null) }
 
-    LaunchedEffect(true) { viewModel.cargarUsuarios() }
+    LaunchedEffect(true) { adminViewModel.cargarUsuarios() }
     LaunchedEffect(mensaje) {
         mensaje?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
-            viewModel.limpiarMensaje()
+            adminViewModel.limpiarMensaje()
         }
     }
 
@@ -55,12 +53,12 @@ fun AdminUsuariosScreen(
                 title = { Text("Gestionar usuarios") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Filled.ArrowBack, null)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.cargarUsuarios() }) {
-                        Icon(Icons.Filled.Refresh, null)
+                    IconButton(onClick = { adminViewModel.cargarUsuarios() }) {
+                        Icon(Icons.Filled.Refresh, "Actualizar")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -69,11 +67,9 @@ fun AdminUsuariosScreen(
         }
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
+            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)
         ) {
+            // Buscador
             TextField(
                 value = busqueda, onValueChange = { busqueda = it },
                 placeholder = { Text("Buscar por nombre o correo...") },
@@ -84,135 +80,175 @@ fun AdminUsuariosScreen(
                             Icon(Icons.Filled.Clear, null)
                         }
                 },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                singleLine = true, modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = TextFieldDefaults.colors(
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    focusedContainerColor   = MaterialTheme.colorScheme.surfaceVariant)
             )
 
             Spacer(Modifier.height(8.dp))
-            Text("${filtrados.size} usuarios registrados",
+
+            Text("${filtrados.size} usuario${if (filtrados.size != 1) "s" else ""} registrado${if (filtrados.size != 1) "s" else ""}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+
             Spacer(Modifier.height(8.dp))
 
             if (cargando) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().padding(top = 48.dp),
+                    contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             } else {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     filtrados.forEach { usuario ->
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (usuario.activo)
+                                    MaterialTheme.colorScheme.surface
+                                else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f))
                         ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Avatar
-                                Surface(
-                                    shape = CircleShape,
-                                    color = if (usuario.activo)
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    else
-                                        MaterialTheme.colorScheme.surfaceVariant,
-                                    modifier = Modifier.size(44.dp)
+                            Column(modifier = Modifier.padding(14.dp)) {
+
+                                // Encabezado: avatar inicial + nombre + rol
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            usuario.nombre.first().uppercaseChar().toString(),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            color = if (usuario.activo)
-                                                MaterialTheme.colorScheme.primary
-                                            else
-                                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-
-                                Spacer(Modifier.width(12.dp))
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(usuario.nombre, fontWeight = FontWeight.SemiBold)
-                                    Text(
-                                        usuario.correo,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                    )
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = when (usuario.rol) {
+                                            "conductor"     -> MaterialTheme.colorScheme.primaryContainer
+                                            "administrador" -> MaterialTheme.colorScheme.tertiaryContainer
+                                            else            -> MaterialTheme.colorScheme.secondaryContainer
+                                        },
+                                        modifier = Modifier.size(42.dp)
                                     ) {
-                                        AssistChip(
-                                            onClick = {},
-                                            label = {
-                                                Text(
-                                                    usuario.rol,
-                                                    style = MaterialTheme.typography.labelSmall
-                                                )
-                                            },
-                                            leadingIcon = {
-                                                Icon(
-                                                    if (usuario.rol == "conductor")
-                                                        Icons.Filled.DirectionsCar
-                                                    else Icons.Filled.Person,
-                                                    null,
-                                                    modifier = Modifier.size(14.dp)
-                                                )
-                                            }
-                                        )
-                                        if (!usuario.activo) {
-                                            AssistChip(
-                                                onClick = {},
-                                                label = {
-                                                    Text(
-                                                        "Inactivo",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.error
-                                                    )
-                                                }
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                when (usuario.rol) {
+                                                    "conductor"     -> Icons.Filled.DirectionsCar
+                                                    "administrador" -> Icons.Filled.AdminPanelSettings
+                                                    else            -> Icons.Filled.Person
+                                                },
+                                                null,
+                                                tint = when (usuario.rol) {
+                                                    "conductor"     -> MaterialTheme.colorScheme.primary
+                                                    "administrador" -> MaterialTheme.colorScheme.tertiary
+                                                    else            -> MaterialTheme.colorScheme.secondary
+                                                },
+                                                modifier = Modifier.size(22.dp)
                                             )
                                         }
                                     }
-                                }
 
-                                // Activar / Desactivar
-                                IconButton(onClick = {
-                                    viewModel.toggleActivoUsuario(usuario.idUsuario)
-                                }) {
-                                    Icon(
-                                        if (usuario.activo) Icons.Filled.ToggleOn
-                                        else Icons.Filled.ToggleOff,
-                                        contentDescription = "Activar/Desactivar",
-                                        tint = if (usuario.activo)
-                                            MaterialTheme.colorScheme.primary
-                                        else
-                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                                        modifier = Modifier.size(28.dp)
+                                    Spacer(Modifier.width(12.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(usuario.nombre, fontWeight = FontWeight.Bold)
+                                        Text(usuario.correo,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                    }
+
+                                    // Chip de rol
+                                    AssistChip(
+                                        onClick = {},
+                                        label = {
+                                            Text(
+                                                usuario.rol.replaceFirstChar { it.uppercase() },
+                                                style = MaterialTheme.typography.labelSmall)
+                                        }
                                     )
                                 }
 
-                                // Cambiar rol
-                                IconButton(onClick = { usuarioRol = usuario }) {
-                                    Icon(
-                                        Icons.Filled.SwapHoriz,
-                                        "Cambiar rol",
-                                        tint = MaterialTheme.colorScheme.secondary
+                                Spacer(Modifier.height(10.dp))
+                                HorizontalDivider()
+                                Spacer(Modifier.height(10.dp))
+
+                                // Controles: Activo toggle + Cambiar rol + Eliminar
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Toggle activo/inactivo
+                                    Column {
+                                        Text(
+                                            if (usuario.activo) "Cuenta activa" else "Cuenta bloqueada",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (usuario.activo)
+                                                MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.error
+                                        )
+                                        Text(
+                                            if (usuario.activo) "Puede iniciar sesión"
+                                            else "No puede acceder",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                        )
+                                    }
+                                    Switch(
+                                        checked = usuario.activo,
+                                        onCheckedChange = {
+                                            adminViewModel.toggleActivoUsuario(usuario.idUsuario)
+                                        },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor   = MaterialTheme.colorScheme.primary,
+                                            uncheckedThumbColor = MaterialTheme.colorScheme.error
+                                        )
                                     )
                                 }
 
-                                // Eliminar
-                                IconButton(onClick = { usuarioAEliminar = usuario }) {
-                                    Icon(
-                                        Icons.Filled.Delete,
-                                        null,
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
+                                Spacer(Modifier.height(8.dp))
+
+                                // Cambiar rol + Eliminar
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    // Cambiar rol
+                                    if (usuario.rol != "administrador") {
+                                        OutlinedButton(
+                                            onClick = {
+                                                val nuevoRol = if (usuario.rol == "pasajero")
+                                                    "conductor" else "pasajero"
+                                                adminViewModel.cambiarRol(usuario.idUsuario, nuevoRol)
+                                            },
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(10.dp)
+                                        ) {
+                                            Icon(
+                                                if (usuario.rol == "pasajero")
+                                                    Icons.Filled.DirectionsCar
+                                                else Icons.Filled.Person,
+                                                null, modifier = Modifier.size(14.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text(
+                                                if (usuario.rol == "pasajero") "→ Conductor"
+                                                else "→ Pasajero",
+                                                style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+
+                                    // Eliminar usuario
+                                    OutlinedButton(
+                                        onClick = { usuarioAEliminar = usuario },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = MaterialTheme.colorScheme.error)
+                                    ) {
+                                        Icon(Icons.Filled.Delete, null,
+                                            modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Eliminar",
+                                            style = MaterialTheme.typography.labelSmall)
+                                    }
                                 }
                             }
                         }
@@ -223,45 +259,30 @@ fun AdminUsuariosScreen(
         }
     }
 
-    // Dialog eliminar
+    // Dialog confirmar eliminación
     usuarioAEliminar?.let { u ->
         AlertDialog(
             onDismissRequest = { usuarioAEliminar = null },
             shape = RoundedCornerShape(20.dp),
+            icon = { Icon(Icons.Filled.Warning, null,
+                tint = MaterialTheme.colorScheme.error) },
             title = { Text("Eliminar usuario") },
-            text = { Text("¿Deseas eliminar a ${u.nombre}? Esta acción no se puede deshacer.") },
+            text = {
+                Text("¿Eliminar la cuenta de ${u.nombre}?\n\n" +
+                        "Esta acción también eliminará todos sus datos asociados y no se puede deshacer.")
+            },
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.eliminarUsuario(u.idUsuario)
+                        adminViewModel.eliminarUsuario(u.idUsuario)
                         usuarioAEliminar = null
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("Eliminar") }
+                ) { Text("Sí, eliminar") }
             },
             dismissButton = {
                 TextButton(onClick = { usuarioAEliminar = null }) { Text("Cancelar") }
-            }
-        )
-    }
-
-    // Dialog cambiar rol
-    usuarioRol?.let { u ->
-        val nuevoRol = if (u.rol == "conductor") "pasajero" else "conductor"
-        AlertDialog(
-            onDismissRequest = { usuarioRol = null },
-            shape = RoundedCornerShape(20.dp),
-            title = { Text("Cambiar rol") },
-            text = { Text("¿Cambiar el rol de ${u.nombre} de ${u.rol} a $nuevoRol?") },
-            confirmButton = {
-                Button(onClick = {
-                    viewModel.cambiarRolUsuario(u.idUsuario, nuevoRol)
-                    usuarioRol = null
-                }) { Text("Confirmar") }
-            },
-            dismissButton = {
-                TextButton(onClick = { usuarioRol = null }) { Text("Cancelar") }
             }
         )
     }

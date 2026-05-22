@@ -116,4 +116,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun limpiarError() { _loginError.postValue(null) }
+
+// En cargarSesionGuardada() ya se carga fotoPerfil desde prefs — está correcto
+// En login() se sobreescribe fotoPerfil con el valor del backend — está correcto
 }

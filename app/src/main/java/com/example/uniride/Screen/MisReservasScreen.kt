@@ -1,5 +1,7 @@
 package com.example.uniride.Screen
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -36,13 +38,11 @@ fun MisReservasScreen(
     val mensaje  by reservaViewModel.mensaje.observeAsState(null)
     val context  = LocalContext.current
     val hoy      = LocalDate.now()
-
     var reservaACancelar by remember { mutableStateOf<Reserva?>(null) }
 
     LaunchedEffect(true) {
         sesion?.idUsuario?.let { reservaViewModel.cargarMisReservas(it) }
     }
-
     LaunchedEffect(mensaje) {
         mensaje?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
@@ -50,7 +50,6 @@ fun MisReservasScreen(
         }
     }
 
-    // Solo reservas activas (fecha del viaje hoy o futura)
     val activas = (reservas ?: emptyList()).filter { reserva ->
         val fechaViaje = try {
             LocalDate.parse(reserva.viaje?.fechaHora?.take(10) ?: "")
@@ -61,19 +60,11 @@ fun MisReservasScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        if (sesion?.rol == "conductor")
-                            "Mis reservas como pasajero"
-                        else "Mis reservas"
-                    )
-                },
+                title = { Text("Mis reservas") },
                 actions = {
-                    // Botón historial
                     IconButton(onClick = {
                         navController.navigate(Routes.HISTORIAL_RESERVAS)
                     }) { Icon(Icons.Filled.History, "Historial") }
-                    // Botón recargar
                     IconButton(onClick = {
                         sesion?.idUsuario?.let { reservaViewModel.cargarMisReservas(it) }
                     }) { Icon(Icons.Filled.Refresh, "Actualizar") }
@@ -97,13 +88,14 @@ fun MisReservasScreen(
             }
         } else if (activas.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Filled.BookOnline, null,
-                        modifier = Modifier.size(64.dp),
+                Column(horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(32.dp)) {
+                    Icon(Icons.Filled.BookOnline, null, modifier = Modifier.size(64.dp),
                         tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(12.dp))
                     Text("No tienes reservas activas",
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                     Spacer(Modifier.height(4.dp))
                     TextButton(onClick = {
                         navController.navigate(Routes.HISTORIAL_RESERVAS)
@@ -119,139 +111,170 @@ fun MisReservasScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                Text("${activas.size} reserva${if (activas.size > 1) "s" else ""} activa${if (activas.size > 1) "s" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+
                 activas.forEach { reserva ->
-                    // ── Card clickable → detalle de reserva ───────────
                     Card(
-                        onClick = {
-                            navController.navigate("reserva_detalle/${reserva.idReserva}")
-                        },
+                        onClick = { navController.navigate("reserva_detalle/${reserva.idReserva}") },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (reserva.confirmada)
+                                MaterialTheme.colorScheme.surface
+                            else MaterialTheme.colorScheme.surface)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
 
-                            // ── Estado y número ────────────────────────
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
+                            // ── Barra de estado superior ───────────────────────
+                            Row(modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("Reserva #${reserva.idReserva}",
-                                    fontWeight = FontWeight.Bold)
+                                verticalAlignment = Alignment.CenterVertically) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    AssistChip(
-                                        onClick = {},
-                                        label = {
-                                            Text(
-                                                if (reserva.confirmada) "Confirmada"
-                                                else "Pendiente",
-                                                style = MaterialTheme.typography.labelSmall
-                                            )
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                if (reserva.confirmada) Icons.Filled.CheckCircle
-                                                else Icons.Filled.HourglassEmpty,
-                                                null,
-                                                modifier = Modifier.size(14.dp),
-                                                tint = if (reserva.confirmada)
-                                                    MaterialTheme.colorScheme.primary
-                                                else MaterialTheme.colorScheme.tertiary
-                                            )
-                                        }
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Icon(Icons.Filled.ChevronRight, "Ver detalle",
-                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
-                                        modifier = Modifier.size(20.dp))
+                                    Icon(
+                                        if (reserva.confirmada) Icons.Filled.CheckCircle
+                                        else Icons.Filled.HourglassEmpty,
+                                        null,
+                                        tint = if (reserva.confirmada)
+                                            MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.tertiary,
+                                        modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        if (reserva.confirmada) "Confirmada" else "Pendiente",
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (reserva.confirmada)
+                                            MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.tertiary,
+                                        style = MaterialTheme.typography.bodyMedium)
                                 }
+                                Text("# ${reserva.idReserva}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
                             }
 
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(10.dp))
+                            HorizontalDivider()
+                            Spacer(Modifier.height(10.dp))
 
-                            // ── Info del viaje ─────────────────────────
+                            // ── Info del viaje ─────────────────────────────────
                             reserva.viaje?.let { v ->
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Filled.LocationOn, null,
                                         tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(4.dp))
+                                        modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
                                     Text("${v.origen} → ${v.sede?.nombreSede ?: v.destino}",
-                                        style = MaterialTheme.typography.bodyMedium)
+                                        fontWeight = FontWeight.SemiBold)
                                 }
-                                Spacer(Modifier.height(4.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.CalendarToday, null,
-                                        tint = MaterialTheme.colorScheme.secondary,
-                                        modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(v.fechaHora.take(10),
-                                        style = MaterialTheme.typography.bodySmall)
-                                    Spacer(Modifier.width(12.dp))
-                                    Icon(Icons.Filled.AccessTime, null,
-                                        tint = MaterialTheme.colorScheme.secondary,
-                                        modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(
-                                        if (v.fechaHora.length >= 16)
-                                            v.fechaHora.substring(11, 16)
-                                        else "--:--",
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
-                                Spacer(Modifier.height(4.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.AttachMoney, null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(4.dp))
-                                    Text("$ ${"%.0f".format(v.costo)}",
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        style = MaterialTheme.typography.bodySmall)
+                                Spacer(Modifier.height(6.dp))
+                                Row(modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Filled.CalendarToday, null,
+                                            tint = MaterialTheme.colorScheme.secondary,
+                                            modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(v.fechaHora.take(10),
+                                            style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Filled.AccessTime, null,
+                                            tint = MaterialTheme.colorScheme.secondary,
+                                            modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(if (v.fechaHora.length >= 16)
+                                            v.fechaHora.substring(11, 16) else "--:--",
+                                            style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Filled.AttachMoney, null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(14.dp))
+                                        Text("${"%.0f".format(v.costo)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Bold)
+                                    }
                                 }
 
-                                // Conductor confirmado
-                                if (reserva.confirmada) {
+                                // Punto de encuentro si confirmada
+                                if (reserva.confirmada && !v.descripcionPunto.isNullOrBlank()) {
                                     Spacer(Modifier.height(6.dp))
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Filled.Person, null,
-                                            tint = MaterialTheme.colorScheme.secondary,
-                                            modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Filled.Place, null,
+                                            tint = MaterialTheme.colorScheme.tertiary,
+                                            modifier = Modifier.size(14.dp))
                                         Spacer(Modifier.width(4.dp))
-                                        Text("Conductor: ${v.vehiculo?.usuario?.nombre ?: "-"}",
+                                        Text(v.descripcionPunto,
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.secondary)
+                                            color = MaterialTheme.colorScheme.tertiary)
                                     }
                                 }
                             }
 
                             Spacer(Modifier.height(10.dp))
                             HorizontalDivider()
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(10.dp))
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("Toca para ver detalles y perfil del conductor",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                            // ── Botones de acción ──────────────────────────────
+                            Row(modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
 
-                                // Botón cancelar (solo pendientes)
+                                // Ver detalles (siempre visible)
+                                OutlinedButton(
+                                    onClick = {
+                                        navController.navigate("reserva_detalle/${reserva.idReserva}")
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Filled.Info, null,
+                                        modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Detalles",
+                                        style = MaterialTheme.typography.labelMedium)
+                                }
+
+                                // WhatsApp conductor (si confirmada)
+                                val tel = reserva.viaje?.vehiculo?.usuario?.telefono
+                                if (reserva.confirmada && !tel.isNullOrBlank()) {
+                                    Button(
+                                        onClick = {
+                                            val numero = tel.filter { it.isDigit() }
+                                            context.startActivity(Intent(Intent.ACTION_VIEW,
+                                                Uri.parse("https://wa.me/57$numero")))
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.secondary)
+                                    ) {
+                                        Icon(Icons.Filled.Chat, null,
+                                            modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("WhatsApp",
+                                            style = MaterialTheme.typography.labelMedium)
+                                    }
+                                }
+
+                                // Cancelar (solo si no confirmada)
                                 if (!reserva.confirmada) {
-                                    TextButton(
+                                    OutlinedButton(
                                         onClick = { reservaACancelar = reserva },
-                                        colors = ButtonDefaults.textButtonColors(
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
                                             contentColor = MaterialTheme.colorScheme.error)
                                     ) {
                                         Icon(Icons.Filled.Cancel, null,
                                             modifier = Modifier.size(14.dp))
                                         Spacer(Modifier.width(4.dp))
                                         Text("Cancelar",
-                                            style = MaterialTheme.typography.labelSmall)
+                                            style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
                             }
@@ -263,16 +286,13 @@ fun MisReservasScreen(
         }
     }
 
-    // ── Dialog cancelar ──────────────────────────────────────────────
     reservaACancelar?.let { r ->
         AlertDialog(
             onDismissRequest = { reservaACancelar = null },
             shape = RoundedCornerShape(20.dp),
             title = { Text("Cancelar reserva") },
-            text = {
-                Text("¿Deseas cancelar tu reserva en el viaje de " +
-                        "${r.viaje?.origen} a ${r.viaje?.sede?.nombreSede}?")
-            },
+            text = { Text("¿Cancelar la reserva del viaje de " +
+                    "${r.viaje?.origen} a ${r.viaje?.sede?.nombreSede}?") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -283,7 +303,7 @@ fun MisReservasScreen(
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("Cancelar reserva") }
+                ) { Text("Sí, cancelar") }
             },
             dismissButton = {
                 TextButton(onClick = { reservaACancelar = null }) { Text("No, volver") }

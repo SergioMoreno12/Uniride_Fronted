@@ -28,17 +28,14 @@ fun AdminScreen(
 ) {
     Scaffold(
         topBar = {
+            // Sin ningún botón en las acciones del topBar
             TopAppBar(
-                title = { Text("Panel Administrador") },
-                actions = {
-                    IconButton(onClick = {
-                        // Fix: cerrar sesión correctamente
-                        authViewModel.cerrarSesion()
-                        navController.navigate(Routes.LOGIN) {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    }) {
-                        Icon(Icons.Filled.Logout, "Cerrar sesión")
+                title = {
+                    Column {
+                        Text("Panel Administrador", fontWeight = FontWeight.Bold)
+                        Text("Universidad de Cundinamarca",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -54,41 +51,43 @@ fun AdminScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("Gestión del sistema", fontWeight = FontWeight.Bold,
+            Text("Gestión del sistema",
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary)
 
-            AdminMenuItem(Icons.Filled.People,     "Gestionar usuarios",
-                "Ver, editar y administrar usuarios") {
+            AdminMenuItem(Icons.Filled.People, "Gestionar usuarios",
+                "Ver, editar y administrar cuentas") {
                 navController.navigate(Routes.ADMIN_USUARIOS)
             }
             AdminMenuItem(Icons.Filled.DirectionsCar, "Gestionar viajes",
                 "Ver y administrar todos los viajes") {
                 navController.navigate(Routes.ADMIN_VIAJES)
             }
-            AdminMenuItem(Icons.Filled.CarRental,  "Gestionar vehículos",
-                "Ver todos los vehículos registrados") {
+            AdminMenuItem(Icons.Filled.CarRental, "Gestionar vehículos",
+                "Ver los vehículos registrados") {
                 navController.navigate(Routes.ADMIN_VEHICULOS)
             }
-            AdminMenuItem(Icons.Filled.School,     "Gestionar sedes",
+            AdminMenuItem(Icons.Filled.School, "Gestionar sedes",
                 "Crear y eliminar sedes de la Udec") {
                 navController.navigate(Routes.ADMIN_SEDES)
             }
-            AdminMenuItem(Icons.Filled.BarChart,   "Estadísticas",
+            AdminMenuItem(Icons.Filled.BarChart, "Estadísticas",
                 "Resumen del sistema") {
                 navController.navigate(Routes.ADMIN_ESTADISTICAS)
             }
-            AdminMenuItem(Icons.Filled.Report,     "Reportes",
-                "Ver reportes de usuarios") {
+            AdminMenuItem(Icons.Filled.Report, "Reportes",
+                "Reportes de usuarios") {
                 navController.navigate(Routes.ADMIN_REPORTES)
             }
             AdminMenuItem(Icons.Filled.Notifications, "Notificaciones masivas",
-                "Enviar notificaciones a todos") {
+                "Enviar mensajes a todos") {
                 navController.navigate(Routes.ADMIN_NOTIFICACIONES)
             }
 
             Spacer(Modifier.height(8.dp))
 
-            OutlinedButton(
+            // Botón cerrar sesión — único botón de salida
+            Button(
                 onClick = {
                     authViewModel.cerrarSesion()
                     navController.navigate(Routes.LOGIN) {
@@ -97,8 +96,8 @@ fun AdminScreen(
                 },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error)
             ) {
                 Icon(Icons.Filled.Logout, null)
                 Spacer(Modifier.width(8.dp))
@@ -110,10 +109,7 @@ fun AdminScreen(
 
 @Composable
 private fun AdminMenuItem(
-    icon: ImageVector,
-    titulo: String,
-    subtitulo: String,
-    onClick: () -> Unit
+    icon: ImageVector, titulo: String, subtitulo: String, onClick: () -> Unit
 ) {
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp)) {

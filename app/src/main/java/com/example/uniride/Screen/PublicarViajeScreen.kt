@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -37,15 +38,29 @@ fun PublicarViajeScreen(
     val context  = LocalContext.current
     val scope    = rememberCoroutineScope()
 
-    var ciudadOrigen    by remember { mutableStateOf("") }
-    var fechaHora       by remember { mutableStateOf("") }
-    var horaSalida      by remember { mutableStateOf("06:00") }
-    var horaLlegada     by remember { mutableStateOf("07:00") }
-    var costo           by remember { mutableStateOf("") }
+    var ciudadOrigen     by remember { mutableStateOf("") }
+    var fechaHora        by remember { mutableStateOf("") }
+    var horaSalidaHora   by remember { mutableIntStateOf(6) }
+    var horaSalidaMin    by remember { mutableIntStateOf(0) }
+    var horaSalidaAMPM   by remember { mutableStateOf("AM") }
+    var horaLlegadaHora  by remember { mutableIntStateOf(7) }
+    var horaLlegadaMin   by remember { mutableIntStateOf(0) }
+    var horaLlegadaAMPM  by remember { mutableStateOf("AM") }
+    var costo            by remember { mutableStateOf("") }
     var descripcionPunto by remember { mutableStateOf("") }
     var sedeSeleccionada by remember { mutableStateOf<com.example.uniride.model.Sede?>(null) }
-    var idVehiculo      by remember { mutableStateOf<Long?>(null) }
-    var error           by remember { mutableStateOf<String?>(null) }
+    var idVehiculo       by remember { mutableStateOf<Long?>(null) }
+    var error            by remember { mutableStateOf<String?>(null) }
+
+    // Convierte hora 12h a formato 24h string
+    fun to24h(hora: Int, min: Int, ampm: String): String {
+        val h24 = when {
+            ampm == "AM" && hora == 12 -> 0
+            ampm == "PM" && hora != 12 -> hora + 12
+            else -> hora
+        }
+        return "%02d:%02d".format(h24, min)
+    }
 
     LaunchedEffect(true) {
         viajeViewModel.cargarSedes()
@@ -98,18 +113,14 @@ fun PublicarViajeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (idVehiculo == null) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer)
-                ) {
+                        containerColor = MaterialTheme.colorScheme.errorContainer)) {
                     Row(modifier = Modifier.padding(16.dp)) {
                         Icon(Icons.Filled.Warning, null,
                             tint = MaterialTheme.colorScheme.error)
                         Spacer(Modifier.width(8.dp))
-                        androidx.compose.material3.Text(
-                            "Primero debes registrar tu vehículo en Mi perfil → Mi vehículo",
+                        Text("Primero registra tu vehículo en Mi perfil → Mi vehículo",
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             style = MaterialTheme.typography.bodySmall)
                     }
@@ -119,7 +130,6 @@ fun PublicarViajeScreen(
             Text("Ruta del viaje", fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary)
 
-            // Ciudad de origen
             TextField(ciudadOrigen, { ciudadOrigen = it },
                 label = { Text("Ciudad de origen") },
                 leadingIcon = { Icon(Icons.Filled.LocationCity, null) },
@@ -127,42 +137,99 @@ fun PublicarViajeScreen(
                 singleLine = true, modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp))
 
-            // Sede destino
-            SedeDropdown(
-                sedes = sedes ?: emptyList(),
-                seleccionada = sedeSeleccionada,
-                onSelect = { sedeSeleccionada = it }
-            )
+            SedeDropdown(sedes = sedes ?: emptyList(),
+                seleccionada = sedeSeleccionada, onSelect = { sedeSeleccionada = it })
 
             HorizontalDivider()
-            Text("Fecha y hora", fontWeight = FontWeight.Bold,
+            Text("Fecha", fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary)
 
-            DateTimePickerField(
-                label = "Fecha del viaje",
+            DateTimePickerField(label = "Fecha del viaje",
                 value = fechaHora.take(10),
                 onDateSelected = { fechaHora = it },
-                modifier = Modifier.fillMaxWidth()
-            )
+                modifier = Modifier.fillMaxWidth())
 
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                TextField(horaSalida, { horaSalida = it },
-                    label = { Text("Hora salida") },
-                    leadingIcon = { Icon(Icons.Filled.AccessTime, null) },
-                    placeholder = { Text("06:00") },
-                    singleLine = true, modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp))
+            HorizontalDivider()
+            Text("Horario", fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary)
 
-                TextField(horaLlegada, { horaLlegada = it },
-                    label = { Text("Hora llegada") },
-                    leadingIcon = { Icon(Icons.Filled.AccessTime, null) },
-                    placeholder = { Text("07:00") },
-                    singleLine = true, modifier = Modifier.weight(1f),
+            // Hora de salida en formato 12h
+            Text("Hora de salida", style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                // Hora
+                OutlinedTextField(
+                    value = "%02d".format(horaSalidaHora),
+                    onValueChange = { v ->
+                        v.toIntOrNull()?.let { if (it in 1..12) horaSalidaHora = it }
+                    },
+                    label = { Text("HH") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp))
+                Text(":", fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge)
+                // Minutos
+                OutlinedTextField(
+                    value = "%02d".format(horaSalidaMin),
+                    onValueChange = { v ->
+                        v.toIntOrNull()?.let { if (it in 0..59) horaSalidaMin = it }
+                    },
+                    label = { Text("MM") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp))
+                // AM/PM selector
+                Column {
+                    listOf("AM", "PM").forEach { ampm ->
+                        FilterChip(
+                            selected = horaSalidaAMPM == ampm,
+                            onClick  = { horaSalidaAMPM = ampm },
+                            label    = { Text(ampm, style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.height(32.dp))
+                    }
+                }
+            }
+
+            // Hora de llegada en formato 12h
+            Text("Hora de llegada", style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = "%02d".format(horaLlegadaHora),
+                    onValueChange = { v ->
+                        v.toIntOrNull()?.let { if (it in 1..12) horaLlegadaHora = it }
+                    },
+                    label = { Text("HH") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp))
+                Text(":", fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge)
+                OutlinedTextField(
+                    value = "%02d".format(horaLlegadaMin),
+                    onValueChange = { v ->
+                        v.toIntOrNull()?.let { if (it in 0..59) horaLlegadaMin = it }
+                    },
+                    label = { Text("MM") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp))
+                Column {
+                    listOf("AM", "PM").forEach { ampm ->
+                        FilterChip(
+                            selected = horaLlegadaAMPM == ampm,
+                            onClick  = { horaLlegadaAMPM = ampm },
+                            label    = { Text(ampm, style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.height(32.dp))
+                    }
+                }
             }
 
             HorizontalDivider()
-            Text("Detalles del viaje", fontWeight = FontWeight.Bold,
+            Text("Detalles", fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary)
 
             TextField(costo, { costo = it },
@@ -174,7 +241,7 @@ fun PublicarViajeScreen(
             TextField(descripcionPunto, { descripcionPunto = it },
                 label = { Text("Punto de encuentro") },
                 leadingIcon = { Icon(Icons.Filled.Place, null) },
-                placeholder = { Text("Describe el punto de encuentro exacto...") },
+                placeholder = { Text("Describe el punto exacto de encuentro...") },
                 maxLines = 3, modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp))
 
@@ -183,8 +250,6 @@ fun PublicarViajeScreen(
                     style = MaterialTheme.typography.bodySmall)
             }
 
-            Spacer(Modifier.height(8.dp))
-
             Button(
                 onClick = {
                     if (ciudadOrigen.isBlank()) { error = "Ingresa la ciudad de origen"; return@Button }
@@ -192,14 +257,16 @@ fun PublicarViajeScreen(
                     if (fechaHora.isBlank()) { error = "Selecciona una fecha"; return@Button }
                     if (costo.isBlank()) { error = "Ingresa el costo"; return@Button }
                     if (idVehiculo == null) { error = "Registra tu vehículo primero"; return@Button }
-
                     error = null
-                    val fechaSalida   = "${fechaHora.take(10)}T$horaSalida:00"
-                    val fechaLlegada  = "${fechaHora.take(10)}T$horaLlegada:00"
+
+                    val salida24  = to24h(horaSalidaHora,  horaSalidaMin,  horaSalidaAMPM)
+                    val llegada24 = to24h(horaLlegadaHora, horaLlegadaMin, horaLlegadaAMPM)
+                    val fechaSalida  = "${fechaHora.take(10)}T$salida24:00"
+                    val fechaLlegada = "${fechaHora.take(10)}T$llegada24:00"
 
                     scope.launch {
                         viajeViewModel.publicarViajeCompleto(
-                            dto = ViajeDTO(
+                            ViajeDTO(
                                 origen           = ciudadOrigen,
                                 destino          = sedeSeleccionada!!.nombreSede,
                                 fechaHora        = fechaSalida,

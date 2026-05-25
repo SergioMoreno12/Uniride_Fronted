@@ -82,98 +82,52 @@ fun SedeDropdown(sedes: List<Sede>, seleccionada: Sede?, onSelect: (Sede) -> Uni
     }
 }
 
-// ── ViajeCard ─────────────────────────────────────────────────────
 @Composable
 fun ViajeCard(viaje: Viaje, onClick: () -> Unit) {
     val capacidad = viaje.vehiculo?.capacidad ?: 0
-    val cupos     = viaje.cuposDisponibles ?: capacidad
 
     Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        onClick   = onClick,
+        modifier  = Modifier.fillMaxWidth(),
+        shape     = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.LocationOn, null,
+                Icon(
+                    imageVector = Icons.Filled.LocationOn,
+                    contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp))
+                    modifier = Modifier.size(18.dp)
+                )
                 Spacer(Modifier.width(6.dp))
                 Column {
-                    Text("Desde", style = MaterialTheme.typography.labelSmall,
+                    Text("Desde",
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary)
                     Text(viaje.origen, fontWeight = FontWeight.SemiBold)
                 }
+                Spacer(Modifier.weight(1f))
+                Text("$ ${"%.0f".format(viaje.costo)}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold)
             }
-            Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.School, null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Column {
-                    Text("Sede destino", style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary)
-                    Text(viaje.sede?.nombreSede ?: viaje.destino,
-                        fontWeight = FontWeight.SemiBold)
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            HorizontalDivider()
+
             Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.AccessTime, null,
-                        tint = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(viaje.fechaHora.take(16).replace("T", " "),
-                        style = MaterialTheme.typography.bodySmall)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.AttachMoney, null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp))
-                    Text("${"%.0f".format(viaje.costo)}",
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.DirectionsCar, null,
-                        tint = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("${viaje.vehiculo?.marca} ${viaje.vehiculo?.modelo}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.EventSeat, null,
-                        tint = if (cupos > 0) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        if (cupos > 0) "$cupos cupo${if (cupos > 1) "s" else ""}"
-                        else "Sin cupos",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (cupos > 0) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.error
-                    )
-                }
+            Text("→ ${viaje.destino}", fontWeight = FontWeight.SemiBold)
+
+            Spacer(Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("📅 ${viaje.fechaHora.take(10)}  " +
+                        "🕐 ${if (viaje.fechaHora.length >= 16)
+                            viaje.fechaHora.substring(11, 16) else "--:--"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Text("$capacidad puestos",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary)
             }
         }
     }

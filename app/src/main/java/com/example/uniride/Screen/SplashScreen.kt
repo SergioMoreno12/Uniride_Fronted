@@ -17,8 +17,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.uniride.R
+import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ViewModel.ViajeViewModel
 import com.example.uniride.interfaces.RetrofitClient
 import com.example.uniride.ui.theme.Blue500
@@ -29,7 +31,11 @@ import kotlinx.coroutines.delay
 private enum class ConexionEstado { VERIFICANDO, OK, ERROR }
 
 @Composable
-fun SplashScreen(navController: NavController, viajeViewModel: ViajeViewModel) {
+fun SplashScreen(
+    navController: NavController,
+    viajeViewModel: ViajeViewModel,
+    authViewModel: AuthViewModel = viewModel()
+) {
 
     val alpha    = remember { Animatable(0f) }
     var estado   by remember { mutableStateOf(ConexionEstado.VERIFICANDO) }
@@ -48,7 +54,16 @@ fun SplashScreen(navController: NavController, viajeViewModel: ViajeViewModel) {
         if (ok) {
             if (!reintentando) delay(500)
             estado = ConexionEstado.OK
-            navController.navigate(Routes.LOGIN) {
+
+            // ✅ Auto-login: si ya hay sesión guardada, ir directo a la pantalla del rol
+            val sesion = authViewModel.sesionActual
+            val destino = when {
+                sesion == null              -> Routes.LOGIN
+                sesion.rol == "administrador" -> Routes.ADMIN
+                sesion.rol == "conductor"   -> Routes.MIS_VIAJES
+                else                        -> Routes.HOME
+            }
+            navController.navigate(destino) {
                 popUpTo(Routes.SPLASH) { inclusive = true }
             }
         } else {
@@ -67,7 +82,6 @@ fun SplashScreen(navController: NavController, viajeViewModel: ViajeViewModel) {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(horizontal = 32.dp).alpha(alpha.value)
         ) {
-            // Logo estático — sin rotación ni animación
             Image(
                 painter = painterResource(id = R.drawable.uniridelogo),
                 contentDescription = "UniRide",

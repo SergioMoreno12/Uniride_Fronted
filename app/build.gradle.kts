@@ -30,6 +30,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions { jvmTarget = "11" }
@@ -38,6 +39,7 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation("io.coil-kt:coil-compose:2.5.0")
     implementation(libs.coil.compose)
     implementation(libs.androidx.core.ktx)

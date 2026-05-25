@@ -17,7 +17,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ViewModel.ReservaViewModel
-import java.time.LocalDate
+import java.time.LocalDateTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,19 +29,20 @@ fun HistorialReservasScreen(
     val sesion   = authViewModel.sesionActual
     val reservas by reservaViewModel.misReservas.observeAsState(emptyList())
     val cargando by reservaViewModel.cargando.observeAsState(false)
-    val hoy      = LocalDate.now()
+    val ahora    = LocalDateTime.now()
 
     LaunchedEffect(true) {
         sesion?.idUsuario?.let { reservaViewModel.cargarMisReservas(it) }
     }
 
-    // Solo reservas cuya fecha de viaje ya pasó
+    // ✅ Compara fecha+hora completas (no solo fecha)
     val historial = (reservas ?: emptyList()).filter { reserva ->
-        val fechaViaje = try {
-            LocalDate.parse(reserva.viaje?.fechaHora?.take(10) ?: "")
+        val viajeDt = try {
+            val raw = reserva.viaje?.fechaHora ?: ""
+            LocalDateTime.parse(raw.substring(0, minOf(19, raw.length)))
         } catch (e: Exception) { null }
-        fechaViaje != null && fechaViaje.isBefore(hoy)
-    }
+        viajeDt != null && viajeDt.isBefore(ahora)
+    }.sortedByDescending { it.viaje?.fechaHora ?: "" }
 
     Scaffold(
         topBar = {
@@ -91,7 +92,6 @@ fun HistorialReservasScreen(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
 
                 historial.forEach { reserva ->
-                    // ── Card clickable → detalle de reserva ──────────
                     Card(
                         onClick = {
                             navController.navigate("reserva_detalle/${reserva.idReserva}")
@@ -117,7 +117,6 @@ fun HistorialReservasScreen(
                                         fontWeight = FontWeight.Bold)
                                 }
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    // Indicador si ya calificó
                                     if (reserva.calificada) {
                                         AssistChip(onClick = {}, label = {
                                             Text("Calificado",
@@ -154,6 +153,14 @@ fun HistorialReservasScreen(
                                         modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(4.dp))
                                     Text(v.fechaHora.take(10),
+                                        style = MaterialTheme.typography.bodySmall)
+                                    Spacer(Modifier.width(12.dp))
+                                    Icon(Icons.Filled.AccessTime, null,
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(if (v.fechaHora.length >= 16)
+                                        v.fechaHora.substring(11, 16) else "--:--",
                                         style = MaterialTheme.typography.bodySmall)
                                 }
                                 Spacer(Modifier.height(4.dp))

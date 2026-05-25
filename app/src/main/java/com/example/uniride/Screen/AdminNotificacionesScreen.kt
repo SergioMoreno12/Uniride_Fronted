@@ -27,15 +27,23 @@ fun AdminNotificacionesScreen(
 ) {
     var titulo       by remember { mutableStateOf("") }
     var mensaje      by remember { mutableStateOf("") }
-    var destinatario by remember { mutableStateOf("Todos los estudiantes") }
+    // ✅ Valores corregidos: los que espera el backend
+    var destinatario by remember { mutableStateOf("todos") }
     var expanded     by remember { mutableStateOf(false) }
 
     val notificaciones by viewModel.notificaciones.observeAsState(emptyList())
     val cargando       by viewModel.cargando.observeAsState(false)
     val mensajeVM      by viewModel.mensaje.observeAsState(null)
-    val context = LocalContext.current
+    val context        = LocalContext.current
 
-    val opciones = listOf("Todos los estudiantes", "Solo conductores", "Solo pasajeros")
+    // ✅ Mapa label → valor real para el backend
+    val opciones = linkedMapOf(
+        "Todos los usuarios"  to "todos",
+        "Solo conductores"    to "conductor",
+        "Solo pasajeros"      to "pasajero"
+    )
+    val labelActual = opciones.entries.find { it.value == destinatario }?.key
+        ?: "Todos los usuarios"
 
     LaunchedEffect(true) { viewModel.cargarNotificaciones() }
     LaunchedEffect(mensajeVM) {
@@ -43,7 +51,7 @@ fun AdminNotificacionesScreen(
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
             viewModel.limpiarMensaje()
             if (it.contains("éxito")) {
-                titulo = ""
+                titulo  = ""
                 mensaje = ""
             }
         }
@@ -52,10 +60,15 @@ fun AdminNotificacionesScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Enviar notificaciones") },
+                title = { Text("Notificaciones masivas") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Filled.ArrowBack, null)
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { viewModel.cargarNotificaciones() }) {
+                        Icon(Icons.Filled.Refresh, null)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -71,68 +84,81 @@ fun AdminNotificacionesScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Formulario
+            // ── Formulario ──────────────────────────────────────────────
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                Column(modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
-
-                    Text("Nueva notificación", fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary)
+                Column(
+                    modifier            = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("Nueva notificación",
+                        fontWeight = FontWeight.Bold,
+                        color      = MaterialTheme.colorScheme.primary)
 
                     TextField(
-                        value = titulo, onValueChange = { titulo = it },
-                        label = { Text("Título") },
-                        leadingIcon = { Icon(Icons.Filled.Title, null) },
-                        singleLine = true, modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        value         = titulo,
+                        onValueChange = { titulo = it },
+                        label         = { Text("Título") },
+                        leadingIcon   = { Icon(Icons.Filled.Title, null) },
+                        singleLine    = true,
+                        modifier      = Modifier.fillMaxWidth(),
+                        shape         = RoundedCornerShape(12.dp)
                     )
 
                     TextField(
-                        value = mensaje, onValueChange = { mensaje = it },
-                        label = { Text("Mensaje") },
-                        leadingIcon = { Icon(Icons.Filled.Message, null) },
-                        maxLines = 4, modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        value         = mensaje,
+                        onValueChange = { mensaje = it },
+                        label         = { Text("Mensaje") },
+                        leadingIcon   = { Icon(Icons.Filled.Message, null) },
+                        maxLines      = 4,
+                        modifier      = Modifier.fillMaxWidth(),
+                        shape         = RoundedCornerShape(12.dp)
                     )
 
+                    // ✅ Dropdown con labels amigables pero envía valores correctos
                     ExposedDropdownMenuBox(
-                        expanded = expanded,
+                        expanded        = expanded,
                         onExpandedChange = { expanded = it }
                     ) {
                         TextField(
-                            value = destinatario, onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Destinatarios") },
-                            leadingIcon = { Icon(Icons.Filled.Group, null) },
-                            trailingIcon = {
+                            value         = labelActual,
+                            onValueChange = {},
+                            readOnly      = true,
+                            label         = { Text("Destinatarios") },
+                            leadingIcon   = { Icon(Icons.Filled.Group, null) },
+                            trailingIcon  = {
                                 ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
                             },
                             modifier = Modifier.fillMaxWidth().menuAnchor(),
-                            shape = RoundedCornerShape(12.dp)
+                            shape    = RoundedCornerShape(12.dp)
                         )
-                        ExposedDropdownMenu(expanded = expanded,
-                            onDismissRequest = { expanded = false }) {
-                            opciones.forEach { opcion ->
+                        ExposedDropdownMenu(
+                            expanded        = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            opciones.forEach { (label, valor) ->
                                 DropdownMenuItem(
-                                    text = { Text(opcion) },
-                                    onClick = { destinatario = opcion; expanded = false }
+                                    text    = { Text(label) },
+                                    onClick = { destinatario = valor; expanded = false }
                                 )
                             }
                         }
                     }
 
                     Button(
-                        onClick = {
+                        onClick  = {
+                            if (titulo.isBlank() || mensaje.isBlank()) return@Button
                             viewModel.enviarNotificacion(titulo, mensaje, destinatario)
                         },
-                        enabled = !cargando && titulo.isNotBlank() && mensaje.isNotBlank(),
+                        enabled  = !cargando && titulo.isNotBlank() && mensaje.isNotBlank(),
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape    = RoundedCornerShape(12.dp)
                     ) {
-                        if (cargando)
-                            CircularProgressIndicator(modifier = Modifier.size(22.dp),
-                                strokeWidth = 2.dp)
-                        else {
+                        if (cargando) {
+                            CircularProgressIndicator(
+                                modifier    = Modifier.size(22.dp),
+                                strokeWidth = 2.dp,
+                                color       = androidx.compose.ui.graphics.Color.White)
+                        } else {
                             Icon(Icons.Filled.Send, null)
                             Spacer(Modifier.width(8.dp))
                             Text("Enviar notificación", fontWeight = FontWeight.Bold)
@@ -141,38 +167,57 @@ fun AdminNotificacionesScreen(
                 }
             }
 
-            // Historial real desde la BD
-            val lista = notificaciones ?: emptyList()
+            // ── Historial ───────────────────────────────────────────────
+            val lista = (notificaciones ?: emptyList())
+                .sortedByDescending { it.fechaEnvio }
+
             if (lista.isNotEmpty()) {
-                Text("Historial enviado (${lista.size})",
+                Text("Historial (${lista.size})",
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    color      = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
 
                 lista.forEach { notif ->
-                    Card(modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(),
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape    = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier              = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically) {
-                                Row(verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)) {
+                                verticalAlignment     = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier          = Modifier.weight(1f)
+                                ) {
                                     Icon(Icons.Filled.Notifications, null,
-                                        tint = MaterialTheme.colorScheme.primary,
+                                        tint     = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(8.dp))
-                                    Text(notif.titulo, fontWeight = FontWeight.SemiBold)
+                                    Text(notif.titulo,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier   = Modifier.weight(1f))
                                 }
-                                AssistChip(onClick = {}, label = {
-                                    Text(notif.destinatarios,
-                                        style = MaterialTheme.typography.labelSmall)
-                                })
+                                AssistChip(
+                                    onClick = {},
+                                    label   = {
+                                        Text(
+                                            when (notif.destinatarios) {
+                                                "conductor" -> "Conductores"
+                                                "pasajero"  -> "Pasajeros"
+                                                else        -> "Todos"
+                                            },
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                )
                             }
                             Spacer(Modifier.height(4.dp))
                             Text(notif.mensaje,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                            Spacer(Modifier.height(2.dp))
+                            Spacer(Modifier.height(4.dp))
                             Text(notif.fechaEnvio.take(16).replace("T", " "),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))

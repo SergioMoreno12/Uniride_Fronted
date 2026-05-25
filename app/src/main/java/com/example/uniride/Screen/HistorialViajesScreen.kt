@@ -19,7 +19,7 @@ import com.example.uniride.ViewModel.ViajeViewModel
 import com.example.uniride.interfaces.RetrofitClient
 import com.example.uniride.model.Viaje
 import kotlinx.coroutines.launch
-import java.time.LocalDate
+import java.time.LocalDateTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,33 +28,39 @@ fun HistorialViajesScreen(
     authViewModel: AuthViewModel   = viewModel(),
     viajeViewModel: ViajeViewModel = viewModel()
 ) {
-    val sesion   = authViewModel.sesionActual
-    val scope    = rememberCoroutineScope()
-    val hoy      = LocalDate.now()
+    val sesion = authViewModel.sesionActual
+    val scope  = rememberCoroutineScope()
+    val ahora  = LocalDateTime.now()
 
     var historial by remember { mutableStateOf<List<Viaje>>(emptyList()) }
     var cargando  by remember { mutableStateOf(true) }
 
-    LaunchedEffect(true) {
-        scope.launch {
-            try {
-                sesion?.idUsuario?.let { idUsuario ->
-                    val vehiculos = RetrofitClient.apiService.vehiculosPorUsuario(idUsuario)
-                    vehiculos.firstOrNull()?.let { vehiculo ->
-                        val todos = RetrofitClient.apiService.viajesPorVehiculo(vehiculo.idVehiculo)
-                        // Viajes cuya fecha ya pasó
-                        historial = todos.filter { viaje ->
-                            val fechaViaje = try {
-                                LocalDate.parse(viaje.fechaHora.take(10))
-                            } catch (e: Exception) { null }
-                            fechaViaje != null && fechaViaje.isBefore(hoy)
-                        }
-                    }
+    suspend fun cargar() {
+        cargando = true
+        try {
+            sesion?.idUsuario?.let { idUsuario ->
+                val vehiculos = RetrofitClient.apiService.vehiculosPorUsuario(idUsuario)
+                vehiculos.firstOrNull()?.let { vehiculo ->
+                    val todos = RetrofitClient.apiService.viajesPorVehiculo(vehiculo.idVehiculo)
+                    // ✅ Compara fecha+hora completas, no solo fecha
+                    historial = todos.filter { viaje ->
+                        val dt = try {
+                            val raw = viaje.fechaHora
+                            LocalDateTime.parse(raw.substring(0, minOf(19, raw.length)))
+                        } catch (e: Exception) { null }
+                        // También incluye viajes con estado "completado" o "cancelado"
+                        // aunque su fecha sea futura (ya cerraron)
+                        (dt != null && dt.isBefore(ahora)) ||
+                                viaje.estado == "completado" ||
+                                viaje.estado == "cancelado"
+                    }.sortedByDescending { it.fechaHora }
                 }
-            } catch (e: Exception) { }
-            cargando = false
-        }
+            }
+        } catch (e: Exception) { }
+        cargando = false
     }
+
+    LaunchedEffect(true) { scope.launch { cargar() } }
 
     Scaffold(
         topBar = {
@@ -66,28 +72,9 @@ fun HistorialViajesScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = {
-                        cargando = true
-                        scope.launch {
-                            try {
-                                sesion?.idUsuario?.let { idUsuario ->
-                                    val vehiculos = RetrofitClient.apiService
-                                        .vehiculosPorUsuario(idUsuario)
-                                    vehiculos.firstOrNull()?.let { vehiculo ->
-                                        val todos = RetrofitClient.apiService
-                                            .viajesPorVehiculo(vehiculo.idVehiculo)
-                                        historial = todos.filter { viaje ->
-                                            val fechaViaje = try {
-                                                LocalDate.parse(viaje.fechaHora.take(10))
-                                            } catch (e: Exception) { null }
-                                            fechaViaje != null && fechaViaje.isBefore(hoy)
-                                        }
-                                    }
-                                }
-                            } catch (e: Exception) { }
-                            cargando = false
-                        }
-                    }) { Icon(Icons.Filled.Refresh, "Actualizar") }
+                    IconButton(onClick = { scope.launch { cargar() } }) {
+                        Icon(Icons.Filled.Refresh, "Actualizar")
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface)
@@ -137,13 +124,32 @@ fun HistorialViajesScreen(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text("${viaje.origen} → ${viaje.sede?.nombreSede ?: viaje.destino}",
                                         fontWeight = FontWeight.SemiBold)
-                                    Text(viaje.fechaHora.take(10),
+                                    Text(viaje.fechaHora.take(16).replace("T", " "),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                                 }
-                                Icon(Icons.Filled.CheckCircle, null,
-                                    tint = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier.size(20.dp))
+                                AssistChip(
+                                    onClick = {},
+                                    label = {
+                                        Text(viaje.estado.replaceFirstChar { it.uppercase() },
+                                            style = MaterialTheme.typography.labelSmall)
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            when (viaje.estado) {
+                                                "completado" -> Icons.Filled.CheckCircle
+                                                "cancelado"  -> Icons.Filled.Cancel
+                                                else         -> Icons.Filled.History
+                                            },
+                                            null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = when (viaje.estado) {
+                                                "completado" -> MaterialTheme.colorScheme.secondary
+                                                "cancelado"  -> MaterialTheme.colorScheme.error
+                                                else         -> MaterialTheme.colorScheme.primary
+                                            })
+                                    }
+                                )
                             }
                             Spacer(Modifier.height(6.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {

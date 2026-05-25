@@ -23,7 +23,7 @@ import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ViewModel.ReservaViewModel
 import com.example.uniride.model.Reserva
 import com.example.uniride.ui.theme.Routes
-import java.time.LocalDate
+import java.time.LocalDateTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,7 +37,7 @@ fun MisReservasScreen(
     val cargando by reservaViewModel.cargando.observeAsState(false)
     val mensaje  by reservaViewModel.mensaje.observeAsState(null)
     val context  = LocalContext.current
-    val hoy      = LocalDate.now()
+    val ahora    = LocalDateTime.now()
     var reservaACancelar by remember { mutableStateOf<Reserva?>(null) }
 
     LaunchedEffect(true) {
@@ -50,11 +50,13 @@ fun MisReservasScreen(
         }
     }
 
+    // ✅ Ahora compara fecha+hora completas (no solo fecha)
     val activas = (reservas ?: emptyList()).filter { reserva ->
-        val fechaViaje = try {
-            LocalDate.parse(reserva.viaje?.fechaHora?.take(10) ?: "")
+        val viajeDt = try {
+            val raw = reserva.viaje?.fechaHora ?: ""
+            LocalDateTime.parse(raw.substring(0, minOf(19, raw.length)))
         } catch (e: Exception) { null }
-        fechaViaje != null && !fechaViaje.isBefore(hoy)
+        viajeDt != null && !viajeDt.isBefore(ahora)
     }
 
     Scaffold(
@@ -122,9 +124,7 @@ fun MisReservasScreen(
                         shape = RoundedCornerShape(16.dp),
                         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (reserva.confirmada)
-                                MaterialTheme.colorScheme.surface
-                            else MaterialTheme.colorScheme.surface)
+                            containerColor = MaterialTheme.colorScheme.surface)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
 
@@ -224,7 +224,6 @@ fun MisReservasScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically) {
 
-                                // Ver detalles (siempre visible)
                                 OutlinedButton(
                                     onClick = {
                                         navController.navigate("reserva_detalle/${reserva.idReserva}")
@@ -239,7 +238,6 @@ fun MisReservasScreen(
                                         style = MaterialTheme.typography.labelMedium)
                                 }
 
-                                // WhatsApp conductor (si confirmada)
                                 val tel = reserva.viaje?.vehiculo?.usuario?.telefono
                                 if (reserva.confirmada && !tel.isNullOrBlank()) {
                                     Button(
@@ -261,7 +259,6 @@ fun MisReservasScreen(
                                     }
                                 }
 
-                                // Cancelar (solo si no confirmada)
                                 if (!reserva.confirmada) {
                                     OutlinedButton(
                                         onClick = { reservaACancelar = reserva },

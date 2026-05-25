@@ -42,37 +42,36 @@ fun ViajeActivoDetalleScreen(
     var reservas       by remember { mutableStateOf<List<Reserva>>(emptyList()) }
     var calificaciones by remember { mutableStateOf<List<Calificacion>>(emptyList()) }
     var cargando       by remember { mutableStateOf(true) }
+    var viajeACompletar by remember { mutableStateOf(false) }
+    var viajeACancelar  by remember { mutableStateOf(false) }
 
+    // ✅ Ahora SÍ observa LiveData del ViewModel (antes el observeAsState dead la anulaba)
     val mensaje by reservaViewModel.mensaje.observeAsState(null)
 
+    suspend fun recargar() {
+        try {
+            viaje    = RetrofitClient.apiService.obtenerViaje(idViaje)
+            reservas = RetrofitClient.apiService.reservasPorViaje(idViaje)
+            viaje?.vehiculo?.usuario?.idUsuario?.let { idConductor ->
+                calificaciones = RetrofitClient.apiService
+                    .calificacionesConductor(idConductor)
+                    .filter { cal ->
+                        reservas.any { r -> r.usuario?.idUsuario == cal.pasajero?.idUsuario }
+                    }
+            }
+        } catch (e: Exception) { }
+        cargando = false
+    }
+
     LaunchedEffect(idViaje) {
-        scope.launch {
-            try {
-                viaje    = RetrofitClient.apiService.obtenerViaje(idViaje)
-                reservas = RetrofitClient.apiService.reservasPorViaje(idViaje)
-                // Intentar cargar calificaciones del conductor
-                viaje?.vehiculo?.usuario?.idUsuario?.let { idConductor ->
-                    calificaciones = RetrofitClient.apiService
-                        .calificacionesConductor(idConductor)
-                        .filter { cal ->
-                            // Solo calificaciones de pasajeros de este viaje
-                            reservas.any { r -> r.usuario?.idUsuario == cal.pasajero?.idUsuario }
-                        }
-                }
-            } catch (e: Exception) { }
-            cargando = false
-        }
+        scope.launch { recargar() }
     }
 
     LaunchedEffect(mensaje) {
         mensaje?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
             reservaViewModel.limpiarMensaje()
-            // Recargar reservas después de confirmar
-            scope.launch {
-                try { reservas = RetrofitClient.apiService.reservasPorViaje(idViaje) }
-                catch (e: Exception) { }
-            }
+            scope.launch { recargar() }
         }
     }
 
@@ -83,6 +82,11 @@ fun ViajeActivoDetalleScreen(
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Filled.ArrowBack, null)
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { scope.launch { recargar() } }) {
+                        Icon(Icons.Filled.Refresh, "Actualizar")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -103,7 +107,6 @@ fun ViajeActivoDetalleScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Info del viaje
                 viaje?.let { v ->
                     Card(modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp)) {
@@ -111,27 +114,61 @@ fun ViajeActivoDetalleScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Información del viaje", fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary)
-                            InfoRowDetalle(Icons.Filled.LocationOn,  "Origen",    v.origen)
-                            InfoRowDetalle(Icons.Filled.School,      "Destino",   v.sede?.nombreSede ?: v.destino)
-                            InfoRowDetalle(Icons.Filled.AccessTime,  "Salida",    v.fechaHora.take(16).replace("T", " "))
+                            InfoRowDetalle(Icons.Filled.LocationOn,  "Origen",   v.origen)
+                            InfoRowDetalle(Icons.Filled.School,      "Destino",  v.sede?.nombreSede ?: v.destino)
+                            InfoRowDetalle(Icons.Filled.AccessTime,  "Salida",   v.fechaHora.take(16).replace("T", " "))
                             v.horaLlegada?.let {
-                                InfoRowDetalle(Icons.Filled.Schedule, "Llegada",  it.take(16).replace("T", " "))
+                                InfoRowDetalle(Icons.Filled.Schedule, "Llegada",
+                                    it.take(16).replace("T", " "))
                             }
-                            InfoRowDetalle(Icons.Filled.AttachMoney, "Costo",     "$ ${"%.0f".format(v.costo)}")
+                            InfoRowDetalle(Icons.Filled.AttachMoney, "Costo",
+                                "$ ${"%.0f".format(v.costo)}")
                             v.descripcionPunto?.let {
                                 InfoRowDetalle(Icons.Filled.Place, "Punto de encuentro", it)
                             }
                             InfoRowDetalle(Icons.Filled.Badge, "Estado", v.estado.uppercase())
                         }
                     }
+
+                    // ── Acciones del conductor sobre su viaje ─────────
+                    if (v.estado == "disponible" || v.estado == "lleno") {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { viajeACompletar = true },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondary)
+                            ) {
+                                Icon(Icons.Filled.CheckCircle, null,
+                                    modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Completar viaje",
+                                    style = MaterialTheme.typography.labelMedium)
+                            }
+                            OutlinedButton(
+                                onClick = { viajeACancelar = true },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Icon(Icons.Filled.Cancel, null,
+                                    modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Cancelar viaje",
+                                    style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
                 }
 
-                // Pasajeros con reservas
                 Text("Pasajeros (${reservas.size})", fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface)
 
                 if (reservas.isEmpty()) {
-                    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                    Card(modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)) {
                         Box(modifier = Modifier.padding(16.dp).fillMaxWidth(),
                             contentAlignment = Alignment.Center) {
                             Text("Sin reservas en este viaje",
@@ -161,7 +198,6 @@ fun ViajeActivoDetalleScreen(
 
                                 Spacer(Modifier.height(8.dp))
 
-                                // Calificación del pasajero si existe
                                 val cal = calificaciones.find {
                                     it.pasajero?.idUsuario == reserva.usuario?.idUsuario
                                 }
@@ -225,6 +261,69 @@ fun ViajeActivoDetalleScreen(
                 }
                 Spacer(Modifier.height(16.dp))
             }
+
+            // ── Diálogos ──────────────────────────────────────────
+            if (viajeACompletar) {
+                AlertDialog(
+                    onDismissRequest = { viajeACompletar = false },
+                    shape = RoundedCornerShape(20.dp),
+                    title = { Text("Completar viaje") },
+                    text  = { Text("Marca el viaje como completado. " +
+                            "Los pasajeros podrán calificarte después de esto.") },
+                    confirmButton = {
+                        Button(onClick = {
+                            scope.launch {
+                                try {
+                                    RetrofitClient.apiService.completarViaje(idViaje)
+                                    recargar()
+                                    Toast.makeText(context, "Viaje marcado como completado",
+                                        Toast.LENGTH_SHORT).show()
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Error: ${e.message}",
+                                        Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            viajeACompletar = false
+                        }) { Text("Sí, completar") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { viajeACompletar = false }) { Text("Cancelar") }
+                    }
+                )
+            }
+
+            if (viajeACancelar) {
+                AlertDialog(
+                    onDismissRequest = { viajeACancelar = false },
+                    shape = RoundedCornerShape(20.dp),
+                    title = { Text("Cancelar viaje") },
+                    text  = { Text("¿Cancelar este viaje? Los pasajeros con reserva " +
+                            "serán notificados.") },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    try {
+                                        RetrofitClient.apiService.cancelarViaje(idViaje)
+                                        Toast.makeText(context, "Viaje cancelado",
+                                            Toast.LENGTH_SHORT).show()
+                                        navController.popBackStack()
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Error: ${e.message}",
+                                            Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                                viajeACancelar = false
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error)
+                        ) { Text("Sí, cancelar") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { viajeACancelar = false }) { Text("Volver") }
+                    }
+                )
+            }
         }
     }
 }
@@ -245,9 +344,4 @@ private fun InfoRowDetalle(
             Text(value, fontWeight = FontWeight.SemiBold)
         }
     }
-}
-
-@Composable
-private fun observeAsState(initialValue: Nothing?): androidx.compose.runtime.State<Nothing?> {
-    return remember { mutableStateOf(initialValue) }
 }

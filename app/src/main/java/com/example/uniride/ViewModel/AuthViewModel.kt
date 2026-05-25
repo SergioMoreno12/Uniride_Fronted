@@ -16,13 +16,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs = application.getSharedPreferences("uniride_session", Context.MODE_PRIVATE)
 
-    private val _loginResult = MutableLiveData<LoginResponse?>()
+    private val _loginResult = MutableLiveData<LoginResponse?>(null)
     val loginResult: MutableLiveData<LoginResponse?> = _loginResult
 
-    private val _loginError = MutableLiveData<String?>()
+    private val _loginError = MutableLiveData<String?>(null)
     val loginError: MutableLiveData<String?> = _loginError
 
-    // Carga sesión desde SharedPreferences al arrancar
     var sesionActual: LoginResponse? = cargarSesionGuardada()
         private set
 
@@ -40,9 +39,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun guardarSesion(sesion: LoginResponse) {
         prefs.edit()
-            .putLong("idUsuario",  sesion.idUsuario)
-            .putString("rol",      sesion.rol)
-            .putString("nombre",   sesion.nombre)
+            .putLong("idUsuario",    sesion.idUsuario)
+            .putString("rol",        sesion.rol)
+            .putString("nombre",     sesion.nombre)
             .putString("fotoPerfil", sesion.fotoPerfil)
             .apply()
     }
@@ -57,9 +56,22 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 val response = withContext(Dispatchers.IO) {
                     RetrofitClient.apiService.login(LoginRequest(correo, contrasena))
                 }
+
                 if (response.isSuccessful) {
                     val body = response.body()!!
-                    // Obtener datos completos del usuario para tener fotoPerfil y rol actualizado
+
+                    // ── Si es administrador, NO consultar tabla usuario ────────
+                    // El admin vive en admin_config, no en usuario.
+                    // Usar directamente lo que devuelve el backend.
+                    if (body.rol == "administrador") {
+                        sesionActual = body
+                        guardarSesion(body)
+                        _loginResult.postValue(body)
+                        return@launch
+                    }
+
+                    // ── Para pasajero/conductor, obtener datos completos ───────
+                    // (foto de perfil, rol actualizado, etc.)
                     try {
                         val usuario = withContext(Dispatchers.IO) {
                             RetrofitClient.apiService.obtenerUsuario(body.idUsuario)
@@ -75,10 +87,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         guardarSesion(sesionCompleta)
                         _loginResult.postValue(sesionCompleta)
                     } catch (e: Exception) {
+                        // Si falla la segunda consulta, usar lo que vino del login
                         sesionActual = body
                         guardarSesion(body)
                         _loginResult.postValue(body)
                     }
+
                 } else {
                     _loginError.postValue("Correo o contraseña incorrectos")
                 }
@@ -88,24 +102,21 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Actualiza la sesión en memoria Y en SharedPreferences
     fun actualizarSesion(nueva: LoginResponse) {
         sesionActual = nueva
         guardarSesion(nueva)
         _loginResult.postValue(nueva)
     }
 
-    // Actualiza solo el rol en sesión y SharedPreferences
     fun actualizarRol(nuevoRol: String) {
         val actual = sesionActual ?: return
-        val nueva = actual.copy(rol = nuevoRol)
+        val nueva  = actual.copy(rol = nuevoRol)
         actualizarSesion(nueva)
     }
 
-    // Actualiza foto de perfil en sesión
     fun actualizarFoto(url: String?) {
         val actual = sesionActual ?: return
-        val nueva = actual.copy(fotoPerfil = url)
+        val nueva  = actual.copy(fotoPerfil = url)
         actualizarSesion(nueva)
     }
 
@@ -116,7 +127,4 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun limpiarError() { _loginError.postValue(null) }
-
-// En cargarSesionGuardada() ya se carga fotoPerfil desde prefs — está correcto
-// En login() se sobreescribe fotoPerfil con el valor del backend — está correcto
 }

@@ -43,9 +43,12 @@ fun MisViajesScreen(
     var viajeACancelar by remember { mutableStateOf<Viaje?>(null) }
     var viajeAEditar   by remember { mutableStateOf<Viaje?>(null) }
     var editOrigen     by remember { mutableStateOf("") }
-    var editDestino    by remember { mutableStateOf("") }
     var editFecha      by remember { mutableStateOf("") }
+    var editHora       by remember { mutableStateOf("06") }
+    var editMin        by remember { mutableStateOf("00") }
+    var editAmPm       by remember { mutableStateOf("AM") }
     var editCosto      by remember { mutableStateOf("") }
+    var editPunto      by remember { mutableStateOf("") }
 
     suspend fun cargarViajes() {
         sesion?.idUsuario?.let { idUsuario ->
@@ -64,7 +67,6 @@ fun MisViajesScreen(
         mensaje?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
             viajeViewModel.limpiarMensaje()
-            // Recargar lista si se canceló o editó
             if (it.contains("cancelado") || it.contains("actualizado")) {
                 cargarViajes()
             }
@@ -76,16 +78,10 @@ fun MisViajesScreen(
             TopAppBar(
                 title = { Text("Viajes publicados") },
                 actions = {
-                    // Botón historial
-                    IconButton(onClick = {
-                        navController.navigate(Routes.HISTORIAL_VIAJES)
-                    }) {
+                    IconButton(onClick = { navController.navigate(Routes.HISTORIAL_VIAJES) }) {
                         Icon(Icons.Filled.History, "Historial")
                     }
-                    // Botón recargar
-                    IconButton(onClick = {
-                        scope.launch { cargarViajes() }
-                    }) {
+                    IconButton(onClick = { scope.launch { cargarViajes() } }) {
                         Icon(Icons.Filled.Refresh, "Actualizar")
                     }
                 },
@@ -109,8 +105,8 @@ fun MisViajesScreen(
             }
         } else {
             val lista = (misViajes ?: emptyList())
-                .filter { it.estado != "cancelado" } // solo activos
-                .sortedByDescending { it.fechaHora }  // más recientes primero
+                .filter { it.estado != "cancelado" && it.estado != "completado" }
+                .sortedByDescending { it.fechaHora }
 
             if (lista.isEmpty()) {
                 Box(Modifier.fillMaxSize().padding(padding),
@@ -143,10 +139,8 @@ fun MisViajesScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     lista.forEach { viaje ->
-                        // ── Cada viaje es clickable para ver el detalle ──
                         Card(
                             onClick = {
-                                // Al tocar la tarjeta → ViajeActivoDetalleScreen
                                 navController.navigate("viaje_activo/${viaje.idViaje}")
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -154,8 +148,6 @@ fun MisViajesScreen(
                             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
-
-                                // ── Encabezado ─────────────────────────────
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -166,7 +158,6 @@ fun MisViajesScreen(
                                             "${viaje.origen} → ${viaje.sede?.nombreSede ?: viaje.destino}",
                                             fontWeight = FontWeight.SemiBold
                                         )
-                                        // Fecha y hora separadas
                                         Text(
                                             "📅 ${viaje.fechaHora.take(10)}  " +
                                                     "🕐 ${if (viaje.fechaHora.length >= 16)
@@ -206,20 +197,30 @@ fun MisViajesScreen(
                                 HorizontalDivider()
                                 Spacer(Modifier.height(8.dp))
 
-                                // ── Botones de acción (no navegan al detalle) ───
                                 Row(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     if (viaje.estado == "disponible" || viaje.estado == "lleno") {
-                                        // Botón editar
                                         OutlinedButton(
                                             onClick = {
                                                 viajeAEditar = viaje
                                                 editOrigen  = viaje.origen
-                                                editDestino = viaje.destino
-                                                editFecha   = viaje.fechaHora
-                                                editCosto   = viaje.costo.toString()
+                                                editFecha   = viaje.fechaHora.take(10)
+                                                // Parsear hora (formato 24h)
+                                                val h24 = viaje.fechaHora
+                                                    .substring(11, 13).toIntOrNull() ?: 6
+                                                val mm  = viaje.fechaHora
+                                                    .substring(14, 16)
+                                                editHora = when {
+                                                    h24 == 0  -> "12"
+                                                    h24 > 12  -> "%02d".format(h24 - 12)
+                                                    else      -> "%02d".format(h24)
+                                                }
+                                                editMin   = mm
+                                                editAmPm  = if (h24 >= 12) "PM" else "AM"
+                                                editCosto = viaje.costo.toInt().toString()
+                                                editPunto = viaje.descripcionPunto ?: ""
                                             },
                                             modifier = Modifier.weight(1f)
                                         ) {
@@ -229,7 +230,6 @@ fun MisViajesScreen(
                                             Text("Editar",
                                                 style = MaterialTheme.typography.labelSmall)
                                         }
-                                        // Botón cancelar
                                         OutlinedButton(
                                             onClick = { viajeACancelar = viaje },
                                             modifier = Modifier.weight(1f),
@@ -245,7 +245,6 @@ fun MisViajesScreen(
                                     }
                                 }
 
-                                // Hint para tap
                                 Text(
                                     "Toca para ver pasajeros y detalles",
                                     style = MaterialTheme.typography.labelSmall,
@@ -261,7 +260,7 @@ fun MisViajesScreen(
         }
     }
 
-    // ── Dialog cancelar viaje ─────────────────────────────────────────
+    // ── Cancelar viaje ────────────────────────────────────────────────
     viajeACancelar?.let { v ->
         AlertDialog(
             onDismissRequest = { viajeACancelar = null },
@@ -288,35 +287,83 @@ fun MisViajesScreen(
         )
     }
 
-    // ── Dialog editar viaje ───────────────────────────────────────────
+    // ── Editar viaje (con DatePicker y selector de hora) ──────────────
     viajeAEditar?.let { v ->
         AlertDialog(
             onDismissRequest = { viajeAEditar = null },
             shape = RoundedCornerShape(20.dp),
             title = { Text("Editar viaje") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.verticalScroll(rememberScrollState())
+                ) {
                     TextField(
                         value = editOrigen, onValueChange = { editOrigen = it },
-                        label = { Text("Origen") }, singleLine = true,
+                        label = { Text("Ciudad de origen") }, singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
+
+                    // DatePicker
+                    DateTimePickerField(
+                        label = "Fecha del viaje",
+                        value = editFecha,
+                        onDateSelected = { editFecha = it.take(10) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Selector de hora 12h
+                    Text("Hora de salida",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = editHora,
+                            onValueChange = { v2 ->
+                                val n = v2.toIntOrNull()
+                                if (n != null && n in 1..12) editHora = "%02d".format(n)
+                                else if (v2.isEmpty()) editHora = ""
+                            },
+                            label = { Text("HH") }, singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        Text(":", fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge)
+                        OutlinedTextField(
+                            value = editMin,
+                            onValueChange = { v2 ->
+                                val n = v2.toIntOrNull()
+                                if (n != null && n in 0..59) editMin = "%02d".format(n)
+                                else if (v2.isEmpty()) editMin = ""
+                            },
+                            label = { Text("MM") }, singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        Column {
+                            listOf("AM", "PM").forEach { ap ->
+                                FilterChip(
+                                    selected = editAmPm == ap,
+                                    onClick  = { editAmPm = ap },
+                                    label    = { Text(ap, style = MaterialTheme.typography.labelSmall) },
+                                    modifier = Modifier.height(32.dp))
+                            }
+                        }
+                    }
+
                     TextField(
-                        value = editDestino, onValueChange = { editDestino = it },
-                        label = { Text("Destino") }, singleLine = true,
+                        value = editCosto, onValueChange = { editCosto = it.filter { c -> c.isDigit() } },
+                        label = { Text("Costo por puesto") }, singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
+
                     TextField(
-                        value = editFecha, onValueChange = { editFecha = it },
-                        label = { Text("Fecha hora (yyyy-MM-ddTHH:mm:ss)") }, singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    TextField(
-                        value = editCosto, onValueChange = { editCosto = it },
-                        label = { Text("Costo") }, singleLine = true,
+                        value = editPunto, onValueChange = { editPunto = it },
+                        label = { Text("Punto de encuentro") }, maxLines = 2,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -324,8 +371,16 @@ fun MisViajesScreen(
             },
             confirmButton = {
                 Button(onClick = {
+                    val h12  = editHora.toIntOrNull() ?: 6
+                    val mm   = editMin.toIntOrNull() ?: 0
+                    val h24  = when {
+                        editAmPm == "AM" && h12 == 12 -> 0
+                        editAmPm == "PM" && h12 != 12 -> h12 + 12
+                        else -> h12
+                    }
+                    val fechaSalida = "$editFecha" + "T%02d:%02d:00".format(h24, mm)
                     viajeViewModel.editarViaje(
-                        v.idViaje, editOrigen, editDestino, editFecha,
+                        v.idViaje, editOrigen, v.destino, fechaSalida,
                         editCosto.toDoubleOrNull() ?: v.costo,
                         v.sede?.idSede ?: 0L
                     )

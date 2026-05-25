@@ -9,53 +9,55 @@ import com.example.uniride.Screen.*
 import com.example.uniride.ViewModel.*
 
 object Routes {
-    const val SPLASH                = "splash"
-    const val LOGIN                 = "login"
-    const val REGISTER              = "register"
-    const val HOME                  = "home"
-    const val VIAJES                = "viajes"
-    const val VIAJE_DETALLE         = "viaje_detalle/{idViaje}"
-    const val MIS_RESERVAS          = "mis_reservas"
-    const val HISTORIAL_RESERVAS    = "historial_reservas"
-    const val PUBLICAR              = "publicar"
-    const val MIS_VIAJES            = "mis_viajes"
-    const val HISTORIAL_VIAJES      = "historial_viajes"
-    const val VIAJE_ACTIVO_DETALLE  = "viaje_activo/{idViaje}"
-    const val PERFIL                = "perfil"
-    const val EDITAR_PERFIL         = "editar_perfil"
-    const val AJUSTES               = "ajustes"
-    const val MI_VEHICULO           = "mi_vehiculo"
-    const val REGISTRAR_VEHICULO    = "registrar_vehiculo"
-    const val CALIFICAR             = "calificar/{idReserva}/{idConductor}"
-    const val NOTIFICACIONES        = "notificaciones"
-    const val CONDUCTOR_PERFIL      = "conductor_perfil/{idConductor}"
-    const val VIAJES_POR_SEDE       = "viajes_por_sede/{idSede}"
-    const val VIAJES_POR_CIUDAD     = "viajes_por_ciudad/{ciudad}"
-    const val VIAJES_POR_CONDUCTOR  = "viajes_por_conductor/{idConductor}"
-    const val ADMIN                 = "admin"
-    const val ADMIN_USUARIOS        = "admin_usuarios"
-    const val ADMIN_VIAJES          = "admin_viajes"
-    const val ADMIN_VEHICULOS       = "admin_vehiculos"
-    const val ADMIN_SEDES           = "admin_sedes"
-    const val ADMIN_ESTADISTICAS    = "admin_estadisticas"
-    const val ADMIN_REPORTES        = "admin_reportes"
-    const val ADMIN_NOTIFICACIONES  = "admin_notificaciones"
-    const val RESERVA_DETALLE      = "reserva_detalle/{idReserva}"
-    const val LISTA_CONDUCTORES    = "lista_conductores"
+    const val SPLASH                  = "splash"
+    const val LOGIN                   = "login"
+    const val REGISTER                = "register"
+    const val HOME                    = "home"
+    const val VIAJES                  = "viajes"
+    const val VIAJE_DETALLE           = "viaje_detalle/{idViaje}"
+    const val MIS_RESERVAS            = "mis_reservas"
+    const val HISTORIAL_RESERVAS      = "historial_reservas"
+    const val PUBLICAR                = "publicar"
+    const val MIS_VIAJES              = "mis_viajes"
+    const val HISTORIAL_VIAJES        = "historial_viajes"
+    const val VIAJE_ACTIVO_DETALLE    = "viaje_activo/{idViaje}"
+    const val PERFIL                  = "perfil"
+    const val EDITAR_PERFIL           = "editar_perfil"
+    const val AJUSTES                 = "ajustes"
+    const val MI_VEHICULO             = "mi_vehiculo"
+    const val REGISTRAR_VEHICULO      = "registrar_vehiculo"
+    const val CALIFICAR               = "calificar/{idReserva}/{idConductor}"
+    const val NOTIFICACIONES          = "notificaciones"
+    const val CONDUCTOR_PERFIL        = "conductor_perfil/{idConductor}"
+    const val VIAJES_POR_SEDE         = "viajes_por_sede/{idSede}"
+    const val VIAJES_POR_CIUDAD       = "viajes_por_ciudad/{ciudad}"
+    const val VIAJES_POR_CONDUCTOR    = "viajes_por_conductor/{idConductor}"
+    const val ADMIN                   = "admin"
+    const val ADMIN_USUARIOS          = "admin_usuarios"
+    const val ADMIN_USUARIO_DETALLE   = "admin_usuario_detalle/{idUsuario}"
+    const val ADMIN_VIAJES            = "admin_viajes"
+    const val ADMIN_VEHICULOS         = "admin_vehiculos"
+    const val ADMIN_SEDES             = "admin_sedes"
+    const val ADMIN_ESTADISTICAS      = "admin_estadisticas"
+    const val ADMIN_REPORTES          = "admin_reportes"
+    const val ADMIN_NOTIFICACIONES    = "admin_notificaciones"
+    const val RESERVA_DETALLE         = "reserva_detalle/{idReserva}"
+    const val LISTA_CONDUCTORES       = "lista_conductores"
 }
 
 @Composable
 fun AppNavigation() {
-    val navController       = rememberNavController()
-    val authViewModel:      AuthViewModel      = viewModel()
-    val viajeViewModel:     ViajeViewModel     = viewModel()
-    val reservaViewModel:   ReservaViewModel   = viewModel()
-    val adminViewModel:     AdminViewModel     = viewModel()
-    val perfilViewModel:    PerfilViewModel    = viewModel()
-    val notifViewModel:     NotifViewModel     = viewModel()
+    val navController     = rememberNavController()
+    val authViewModel:    AuthViewModel    = viewModel()
+    val viajeViewModel:   ViajeViewModel   = viewModel()
+    val reservaViewModel: ReservaViewModel = viewModel()
+    val adminViewModel:   AdminViewModel   = viewModel()
+    val perfilViewModel:  PerfilViewModel  = viewModel()
+    val notifViewModel:   NotifViewModel   = viewModel()
 
     NavHost(navController = navController, startDestination = Routes.SPLASH) {
-        composable(Routes.SPLASH)   { SplashScreen(navController, viajeViewModel) }
+        // ✅ Splash ahora recibe también authViewModel para hacer auto-login
+        composable(Routes.SPLASH)   { SplashScreen(navController, viajeViewModel, authViewModel) }
         composable(Routes.LOGIN)    { LoginScreen(navController, authViewModel) }
         composable(Routes.REGISTER) { RegisterScreen(navController, authViewModel) }
         composable(Routes.HOME)     { HomeScreen(navController, authViewModel, viajeViewModel) }
@@ -89,9 +91,7 @@ fun AppNavigation() {
         composable(Routes.EDITAR_PERFIL) {
             EditarPerfilScreen(navController, authViewModel, perfilViewModel)
         }
-        composable(Routes.AJUSTES) {
-            AjustesScreen(navController)
-        }
+        composable(Routes.AJUSTES) { AjustesScreen(navController) }
         composable(Routes.MI_VEHICULO) {
             MiVehiculoScreen(navController, authViewModel, perfilViewModel)
         }
@@ -122,13 +122,21 @@ fun AppNavigation() {
             val idConductor = back.arguments?.getString("idConductor")?.toLongOrNull() ?: 0L
             ViajesPorConductorScreen(idConductor, navController, authViewModel, viajeViewModel, reservaViewModel)
         }
-        composable(Routes.ADMIN)              { AdminScreen(navController, adminViewModel) }
-        composable(Routes.ADMIN_USUARIOS)     { AdminUsuariosScreen(navController, adminViewModel) }
-        composable(Routes.ADMIN_VIAJES)       { AdminViajesScreen(navController, adminViewModel) }
-        composable(Routes.ADMIN_VEHICULOS)    { AdminVehiculosScreen(navController, adminViewModel) }
-        composable(Routes.ADMIN_SEDES)        { AdminSedesScreen(navController, adminViewModel) }
-        composable(Routes.ADMIN_ESTADISTICAS) { AdminEstadisticasScreen(navController, adminViewModel) }
-        composable(Routes.ADMIN_REPORTES)     { AdminReportesScreen(navController, adminViewModel) }
+        composable(Routes.ADMIN) {
+            AdminScreen(navController, adminViewModel, authViewModel)
+        }
+        composable(Routes.ADMIN_USUARIOS) {
+            AdminUsuariosScreen(navController, adminViewModel)
+        }
+        composable(Routes.ADMIN_USUARIO_DETALLE) { back ->
+            val idUsuario = back.arguments?.getString("idUsuario")?.toLongOrNull() ?: 0L
+            AdminUsuarioDetalleScreen(idUsuario, navController, adminViewModel)
+        }
+        composable(Routes.ADMIN_VIAJES)        { AdminViajesScreen(navController, adminViewModel) }
+        composable(Routes.ADMIN_VEHICULOS)     { AdminVehiculosScreen(navController, adminViewModel) }
+        composable(Routes.ADMIN_SEDES)         { AdminSedesScreen(navController, adminViewModel) }
+        composable(Routes.ADMIN_ESTADISTICAS)  { AdminEstadisticasScreen(navController, adminViewModel) }
+        composable(Routes.ADMIN_REPORTES)      { AdminReportesScreen(navController, adminViewModel) }
         composable(Routes.ADMIN_NOTIFICACIONES){ AdminNotificacionesScreen(navController, adminViewModel) }
         composable(Routes.RESERVA_DETALLE) { back ->
             val idReserva = back.arguments?.getString("idReserva")?.toLongOrNull() ?: 0L

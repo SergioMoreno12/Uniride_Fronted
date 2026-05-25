@@ -28,23 +28,36 @@ fun CalificarConductorScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel()
 ) {
-    val sesion      = authViewModel.sesionActual
-    val scope       = rememberCoroutineScope()
-    val context     = LocalContext.current
+    val sesion       = authViewModel.sesionActual
+    val scope        = rememberCoroutineScope()
+    val context      = LocalContext.current
 
-    var puntuacion  by remember { mutableIntStateOf(0) }
-    var comentario  by remember { mutableStateOf("") }
-    var cargando    by remember { mutableStateOf(false) }
-    var conductor   by remember { mutableStateOf<Usuario?>(null) }
+    var puntuacion   by remember { mutableIntStateOf(0) }
+    var comentario   by remember { mutableStateOf("") }
+    var cargando     by remember { mutableStateOf(false) }
+    var conductor    by remember { mutableStateOf<Usuario?>(null) }
     var yaCalificado by remember { mutableStateOf(false) }
 
     LaunchedEffect(idConductor) {
         scope.launch {
             try {
-                conductor = RetrofitClient.apiService.obtenerUsuario(idConductor)
-                // Verificar si ya calificó
+                conductor    = RetrofitClient.apiService.obtenerUsuario(idConductor)
                 yaCalificado = RetrofitClient.apiService.yaCalificada(idReserva)
             } catch (e: Exception) { }
+        }
+    }
+
+    // ✅ Función helper para volver al destino correcto según el rol
+    fun volverInicio() {
+        val destino = when (sesion?.rol) {
+            "conductor"     -> Routes.MIS_VIAJES
+            "administrador" -> Routes.ADMIN
+            else            -> Routes.HOME
+        }
+        // Volver al destino limpiando todo el back stack intermedio
+        navController.navigate(destino) {
+            popUpTo(destino) { inclusive = false }
+            launchSingleTop = true
         }
     }
 
@@ -85,11 +98,7 @@ fun CalificarConductorScreen(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                 Spacer(Modifier.height(24.dp))
                 Button(
-                    onClick = {
-                        navController.navigate(Routes.HOME) {
-                            popUpTo(0) { inclusive = false }
-                        }
-                    },
+                    onClick = { volverInicio() }, // ✅ navegación corregida
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) { Text("Volver al inicio") }
@@ -152,7 +161,7 @@ fun CalificarConductorScreen(
                     onClick = {
                         if (puntuacion == 0) {
                             Toast.makeText(context, "Selecciona una calificación",
-                                android.widget.Toast.LENGTH_SHORT).show()
+                                Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         cargando = true
@@ -171,15 +180,12 @@ fun CalificarConductorScreen(
                                 RetrofitClient.apiService.marcarReservaCalificada(idReserva)
                                 cargando = false
                                 Toast.makeText(context, "¡Gracias por tu calificación!",
-                                    android.widget.Toast.LENGTH_SHORT).show()
-                                // Ir al inicio
-                                navController.navigate(Routes.HOME) {
-                                    popUpTo(0) { inclusive = false }
-                                }
+                                    Toast.LENGTH_SHORT).show()
+                                volverInicio() // ✅ navegación corregida
                             } catch (e: Exception) {
                                 cargando = false
                                 Toast.makeText(context, e.message ?: "Error al calificar",
-                                    android.widget.Toast.LENGTH_SHORT).show()
+                                    Toast.LENGTH_SHORT).show()
                             }
                         }
                     },

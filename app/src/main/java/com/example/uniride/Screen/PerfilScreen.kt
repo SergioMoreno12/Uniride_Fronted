@@ -25,36 +25,116 @@ import coil.compose.AsyncImage
 import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ViewModel.PerfilViewModel
 import com.example.uniride.interfaces.RetrofitClient
+import com.example.uniride.model.dto.ActualizarPerfilDTO
 import com.example.uniride.ui.theme.Routes
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PerfilScreen(
-    navController: NavController,
-    authViewModel: AuthViewModel     = viewModel(),
+    navController:   NavController,
+    authViewModel:   AuthViewModel   = viewModel(),
     perfilViewModel: PerfilViewModel = viewModel()
 ) {
-    val sesion        = authViewModel.sesionActual
-    val perfilUsuario by perfilViewModel.perfilUsuario.observeAsState(null)
-    val scope         = rememberCoroutineScope()
-    var promedio      by remember { mutableStateOf(0.0) }
+    // ✅ Reactivo: se redibuja automáticamente cuando cambia el rol
+    val sesionLive    by authViewModel.loginResult.observeAsState(authViewModel.sesionActual)
+    val sesion         = sesionLive ?: authViewModel.sesionActual
+    val rolActual      = sesion?.rol ?: "pasajero"
 
-    // Usar el rol de la SESIÓN (ya actualizado en SharedPreferences)
-    val rolActual = sesion?.rol ?: "pasajero"
+    val perfilUsuario by perfilViewModel.perfilUsuario.observeAsState(null)
+    val scope          = rememberCoroutineScope()
+    var promedio       by remember { mutableStateOf(0.0) }
+
+    var mostrarDialogoRol by remember { mutableStateOf(false) }
+    var cambiandoRol      by remember { mutableStateOf(false) }
+
     val esConductor = rolActual == "conductor"
+    val nuevoRol    = if (esConductor) "pasajero" else "conductor"
 
     LaunchedEffect(sesion?.idUsuario) {
         sesion?.idUsuario?.let { id ->
             perfilViewModel.cargarPerfil(id)
             if (esConductor) {
                 scope.launch {
-                    try {
-                        promedio = RetrofitClient.apiService.promedioConductor(id)
-                    } catch (e: Exception) { }
+                    try { promedio = RetrofitClient.apiService.promedioConductor(id) }
+                    catch (e: Exception) { }
                 }
             }
         }
+    }
+
+    // ── Diálogo de confirmación de cambio de rol ──────────────────────────────
+    if (mostrarDialogoRol) {
+        AlertDialog(
+            onDismissRequest = { if (!cambiandoRol) mostrarDialogoRol = false },
+            icon = {
+                Icon(
+                    if (nuevoRol == "conductor") Icons.Filled.DirectionsCar
+                    else Icons.Filled.Person,
+                    null,
+                    tint     = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    if (nuevoRol == "conductor") "Cambiar a Conductor"
+                    else "Cambiar a Pasajero",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    if (nuevoRol == "conductor")
+                        "Como conductor podrás publicar viajes y llevar pasajeros a la universidad. " +
+                                "Necesitarás registrar un vehículo para publicar viajes."
+                    else
+                        "Como pasajero podrás buscar y reservar viajes. " +
+                                "Tus viajes publicados activos seguirán disponibles."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        cambiandoRol = true
+                        scope.launch {
+                            try {
+                                val id = sesion?.idUsuario ?: return@launch
+                                RetrofitClient.apiService.actualizarPerfil(
+                                    id,
+                                    ActualizarPerfilDTO(rol = nuevoRol)
+                                )
+                                authViewModel.actualizarRol(nuevoRol)
+                                mostrarDialogoRol = false
+                            } catch (e: Exception) {
+                                // Si falla, no cambia nada
+                            } finally {
+                                cambiandoRol = false
+                            }
+                        }
+                    },
+                    enabled = !cambiandoRol
+                ) {
+                    if (cambiandoRol) {
+                        CircularProgressIndicator(
+                            modifier    = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color       = androidx.compose.ui.graphics.Color.White
+                        )
+                    } else {
+                        Text("Confirmar")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick  = { mostrarDialogoRol = false },
+                    enabled  = !cambiandoRol
+                ) {
+                    Text("Cancelar")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -89,99 +169,166 @@ fun PerfilScreen(
         ) {
             Spacer(Modifier.height(24.dp))
 
-            // Avatar / foto de perfil
+            // ── Avatar ──────────────────────────────────────────────────────
             val fotoUrl = perfilUsuario?.fotoPerfil ?: sesion?.fotoPerfil
             if (!fotoUrl.isNullOrBlank()) {
                 AsyncImage(
-                    model = fotoUrl,
+                    model              = fotoUrl,
                     contentDescription = null,
-                    modifier = Modifier.size(90.dp).clip(CircleShape),
-                    contentScale = ContentScale.Crop
+                    modifier           = Modifier.size(90.dp).clip(CircleShape),
+                    contentScale       = ContentScale.Crop
                 )
             } else {
                 Box(
-                    modifier = Modifier.size(90.dp).clip(CircleShape)
+                    modifier         = Modifier
+                        .size(90.dp)
+                        .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         (perfilUsuario?.nombre ?: sesion?.nombre ?: "U")
                             .first().uppercaseChar().toString(),
-                        fontSize = 36.sp, fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        fontSize   = 36.sp,
+                        fontWeight = FontWeight.Bold,
+                        color      = MaterialTheme.colorScheme.primary
                     )
                 }
             }
 
             Spacer(Modifier.height(8.dp))
-            Text(perfilUsuario?.nombre ?: sesion?.nombre ?: "Usuario",
-                style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 
-            Text(when (rolActual) {
-                "conductor"     -> "Conductor"
-                "administrador" -> "Administrador"
-                else            -> "Pasajero"
-            },
-                color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            Text(
+                perfilUsuario?.nombre ?: sesion?.nombre ?: "Usuario",
+                style      = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
 
-            // Estrellas para conductor
+            // ── Chip de rol + botón de cambio ───────────────────────────────
+            Spacer(Modifier.height(6.dp))
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                AssistChip(
+                    onClick = { },
+                    label   = {
+                        Text(
+                            when (rolActual) {
+                                "conductor"     -> "Conductor"
+                                "administrador" -> "Administrador"
+                                else            -> "Pasajero"
+                            },
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            when (rolActual) {
+                                "conductor"     -> Icons.Filled.DirectionsCar
+                                "administrador" -> Icons.Filled.AdminPanelSettings
+                                else            -> Icons.Filled.Person
+                            },
+                            null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor          = MaterialTheme.colorScheme.primaryContainer,
+                        labelColor              = MaterialTheme.colorScheme.primary,
+                        leadingIconContentColor = MaterialTheme.colorScheme.primary
+                    )
+                )
+
+                // Solo pasajero y conductor pueden cambiar rol (no admin)
+                if (rolActual != "administrador") {
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = { mostrarDialogoRol = true }) {
+                        Icon(
+                            Icons.Filled.SwapHoriz, null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "Cambiar a ${if (esConductor) "Pasajero" else "Conductor"}",
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
+            }
+
+            // ── Estrellas (solo conductores con calificaciones) ─────────────
             if (esConductor && promedio > 0) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     (1..5).forEach { i ->
                         Icon(
-                            if (i <= promedio.toInt()) Icons.Filled.Star else Icons.Filled.StarBorder,
-                            null, tint = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.size(20.dp))
+                            if (i <= promedio.toInt()) Icons.Filled.Star
+                            else Icons.Filled.StarBorder,
+                            null,
+                            tint     = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                     Spacer(Modifier.width(4.dp))
-                    Text("${"%.1f".format(promedio)}", style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.Bold)
+                    Text(
+                        "${"%.1f".format(promedio)}",
+                        style      = MaterialTheme.typography.bodyMedium,
+                        color      = MaterialTheme.colorScheme.tertiary,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 
             Spacer(Modifier.height(24.dp))
 
-            // Datos
+            // ── Datos del usuario ───────────────────────────────────────────
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Column(modifier = Modifier.padding(8.dp)) {
-                    InfoRowPerfil(Icons.Filled.Person, "Nombre",
-                        perfilUsuario?.nombre ?: "-")
+                    InfoRowPerfil(
+                        Icons.Filled.Person, "Nombre",
+                        perfilUsuario?.nombre ?: "-"
+                    )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    InfoRowPerfil(Icons.Filled.Email, "Correo",
-                        perfilUsuario?.correo ?: "-")
+                    InfoRowPerfil(
+                        Icons.Filled.Email, "Correo",
+                        perfilUsuario?.correo ?: "-"
+                    )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    InfoRowPerfil(Icons.Filled.Phone, "Teléfono",
-                        perfilUsuario?.telefono ?: "No registrado")
+                    InfoRowPerfil(
+                        Icons.Filled.Phone, "Teléfono",
+                        perfilUsuario?.telefono ?: "No registrado"
+                    )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    InfoRowPerfil(Icons.Filled.Badge, "Rol",
-                        when (rolActual) {
-                            "conductor" -> "Conductor"
-                            "administrador" -> "Administrador"
-                            else -> "Pasajero"
-                        })
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    InfoRowPerfil(Icons.Filled.CalendarToday, "Miembro desde",
-                        perfilUsuario?.fechaRegistro?.take(10) ?: "-")
+                    InfoRowPerfil(
+                        Icons.Filled.CalendarToday, "Miembro desde",
+                        perfilUsuario?.fechaRegistro?.take(10) ?: "-"
+                    )
                 }
             }
 
             Spacer(Modifier.height(20.dp))
 
-            Button(onClick = { navController.navigate(Routes.EDITAR_PERFIL) },
+            // ── Botones de acción ───────────────────────────────────────────
+            Button(
+                onClick  = { navController.navigate(Routes.EDITAR_PERFIL) },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(12.dp)) {
-                Icon(Icons.Filled.Edit, null); Spacer(Modifier.width(8.dp))
+                shape    = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Filled.Edit, null)
+                Spacer(Modifier.width(8.dp))
                 Text("Editar perfil", fontWeight = FontWeight.Bold)
             }
 
-            // Mi vehículo solo para conductores
             if (esConductor) {
                 Spacer(Modifier.height(10.dp))
-                OutlinedButton(onClick = { navController.navigate(Routes.MI_VEHICULO) },
+                OutlinedButton(
+                    onClick  = { navController.navigate(Routes.MI_VEHICULO) },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(12.dp)) {
-                    Icon(Icons.Filled.DirectionsCar, null); Spacer(Modifier.width(8.dp))
+                    shape    = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Filled.DirectionsCar, null)
+                    Spacer(Modifier.width(8.dp))
                     Text("Mi vehículo", fontWeight = FontWeight.Bold)
                 }
             }
@@ -190,14 +337,18 @@ fun PerfilScreen(
             OutlinedButton(
                 onClick = {
                     authViewModel.cerrarSesion()
-                    navController.navigate(Routes.LOGIN) { popUpTo(0) { inclusive = true } }
+                    navController.navigate(Routes.LOGIN) {
+                        popUpTo(0) { inclusive = true }
+                    }
                 },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error)
+                shape    = RoundedCornerShape(12.dp),
+                colors   = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                )
             ) {
-                Icon(Icons.Filled.Logout, null); Spacer(Modifier.width(8.dp))
+                Icon(Icons.Filled.Logout, null)
+                Spacer(Modifier.width(8.dp))
                 Text("Cerrar sesión", fontWeight = FontWeight.Bold)
             }
 
@@ -208,13 +359,17 @@ fun PerfilScreen(
 
 @Composable
 private fun InfoRowPerfil(icon: ImageVector, label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth().padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = MaterialTheme.colorScheme.primary,
+    Row(
+        modifier          = Modifier.fillMaxWidth().padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null,
+            tint     = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(12.dp))
         Column {
-            Text(label, style = MaterialTheme.typography.labelSmall,
+            Text(label,
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
             Text(value, fontWeight = FontWeight.SemiBold)
         }

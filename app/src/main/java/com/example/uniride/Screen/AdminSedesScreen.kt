@@ -58,11 +58,6 @@ fun AdminSedesScreen(
                         Icon(Icons.Filled.ArrowBack, null)
                     }
                 },
-                actions = {
-                    IconButton(onClick = { viewModel.cargarSedes() }) {
-                        Icon(Icons.Filled.Refresh, null)
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface)
             )
@@ -73,14 +68,18 @@ fun AdminSedesScreen(
             }
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        RefreshableContent(
+            isRefreshing = cargando,                          // estado del adminViewModel
+            onRefresh    = { viewModel.cargarSedes() },    // método de recarga
+            modifier     = Modifier.fillMaxSize().padding(padding)
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
             Text("${(sedes ?: emptyList()).size} sedes registradas",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
@@ -116,6 +115,7 @@ fun AdminSedesScreen(
             Spacer(Modifier.height(80.dp))
         }
     }
+}
 
     // Dialog nueva sede
     if (showFormulario) {

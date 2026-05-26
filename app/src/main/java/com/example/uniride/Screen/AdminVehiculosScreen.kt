@@ -49,16 +49,16 @@ fun AdminVehiculosScreen(
                         Icon(Icons.Filled.ArrowBack, null)
                     }
                 },
-                actions = {
-                    IconButton(onClick = { viewModel.cargarVehiculos() }) {
-                        Icon(Icons.Filled.Refresh, null)
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface)
             )
         }
     ) { padding ->
+        RefreshableContent(
+            isRefreshing = cargando,                          // estado del adminViewModel
+            onRefresh    = { viewModel.cargarVehiculos() },    // método de recarga
+            modifier     = Modifier.fillMaxSize().padding(padding)
+        ) {
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
 
             Text("${(vehiculos ?: emptyList()).size} vehículos registrados",
@@ -123,4 +123,5 @@ fun AdminVehiculosScreen(
             }
         )
     }
+}
 }

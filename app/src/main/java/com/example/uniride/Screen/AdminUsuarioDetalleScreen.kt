@@ -49,9 +49,6 @@ fun AdminUsuarioDetalleScreen(
     var mostrarDialogoEliminarVehiculo by remember { mutableStateOf<Vehiculo?>(null) }
     var mostrarDialogoEliminarViaje    by remember { mutableStateOf<Viaje?>(null) }
 
-    // ✅ Una sola carga: cuando ya tenemos el usuario (de la lista del admin)
-    // dispara la carga del detalle con el rol correcto. Antes había dos
-    // LaunchedEffect que disparaban dos veces la carga (una sin rol y otra con rol).
     LaunchedEffect(usuario?.idUsuario, usuario?.rol) {
         if (usuario != null) {
             adminViewModel.cargarDetalleUsuario(idUsuario, usuario.rol == "conductor")
@@ -183,20 +180,25 @@ fun AdminUsuarioDetalleScreen(
             )
         }
     ) { padding ->
-        if (usuario == null || cargandoDetalle) {
+        RefreshableContent(
+            isRefreshing = cargandoDetalle,
+            onRefresh    = {
+                adminViewModel.cargarDetalleUsuario(idUsuario,
+                    usuario?.rol == "conductor")
+            },
+            modifier     = Modifier.fillMaxSize().padding(padding)
+        ) {
+        if (usuario == null) {
             Box(
-                modifier         = Modifier.fillMaxSize().padding(padding),
+                modifier         = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) { CircularProgressIndicator() }
-            return@Scaffold
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
 
@@ -639,7 +641,9 @@ fun AdminUsuarioDetalleScreen(
 
             Spacer(Modifier.height(16.dp))
         }
+        }
     }
+}
 }
 
 // ── Componentes auxiliares ────────────────────────────────────────────────────

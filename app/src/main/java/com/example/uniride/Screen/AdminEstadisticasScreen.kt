@@ -63,18 +63,11 @@ fun AdminEstadisticasScreen(
                         Icon(Icons.Filled.ArrowBack, null)
                     }
                 },
-                actions = {
-                    IconButton(onClick = {
-                        viewModel.cargarUsuarios()
-                        viewModel.cargarViajes()
-                        viewModel.cargarVehiculos()
-                        viewModel.cargarReservas()
-                    }) { Icon(Icons.Filled.Refresh, null) }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface)
             )
         }
+
     ) { padding ->
         if (cargando) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {

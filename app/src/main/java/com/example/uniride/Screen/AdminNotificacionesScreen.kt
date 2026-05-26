@@ -66,24 +66,23 @@ fun AdminNotificacionesScreen(
                         Icon(Icons.Filled.ArrowBack, null)
                     }
                 },
-                actions = {
-                    IconButton(onClick = { viewModel.cargarNotificaciones() }) {
-                        Icon(Icons.Filled.Refresh, null)
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface)
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        RefreshableContent(
+            isRefreshing = cargando,
+            onRefresh    = { viewModel.cargarNotificaciones() },
+            modifier     = Modifier.fillMaxSize().padding(padding)
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
             // ── Formulario ──────────────────────────────────────────────
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Column(
@@ -114,7 +113,6 @@ fun AdminNotificacionesScreen(
                         shape         = RoundedCornerShape(12.dp)
                     )
 
-                    // ✅ Dropdown con labels amigables pero envía valores correctos
                     ExposedDropdownMenuBox(
                         expanded        = expanded,
                         onExpandedChange = { expanded = it }
@@ -229,4 +227,5 @@ fun AdminNotificacionesScreen(
             Spacer(Modifier.height(16.dp))
         }
     }
+}
 }

@@ -2,6 +2,7 @@ package com.example.uniride.Screen
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -10,49 +11,47 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ViewModel.ViajeViewModel
+import java.time.LocalDateTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ViajesScreen(
     navController: NavController,
     viajeViewModel: ViajeViewModel = viewModel(),
-    authViewModel: AuthViewModel   = viewModel()
+    authViewModel: AuthViewModel   = viewModel(),
+    fechaFiltro: String?           = null
 ) {
-    var busqueda         by remember { mutableStateOf("") }
-    val viajes           by viajeViewModel.viajes.observeAsState(emptyList())
-    val cargando         by viajeViewModel.cargando.observeAsState(false)
-    val viajesReservados by viajeViewModel.viajesReservados.observeAsState(emptySet())
-    val viajesPropios    by viajeViewModel.viajesPropios.observeAsState(emptySet())
-    val sesion           = authViewModel.sesionActual
+    val viajes   by viajeViewModel.viajes.observeAsState(emptyList())
+    val cargando by viajeViewModel.cargando.observeAsState(false)
+    val ahora    = LocalDateTime.now()
+    var fechaSel by remember(fechaFiltro) { mutableStateOf(fechaFiltro) }
 
-    LaunchedEffect(true) {
-        viajeViewModel.cargarDisponibles(sesion?.idUsuario)
-    }
+    LaunchedEffect(true) { viajeViewModel.cargarDisponibles() }
 
-    // Filtrar: sin los ya reservados, sin los propios, y por búsqueda
-    val filtrados = (viajes ?: emptyList()).filter { viaje ->
-        val yaReservo = viaje.idViaje in (viajesReservados ?: emptySet())
-        val esPropio  = viaje.idViaje in (viajesPropios ?: emptySet())
-        val coincide  = viaje.origen.contains(busqueda, ignoreCase = true) ||
-                viaje.sede?.nombreSede?.contains(busqueda, ignoreCase = true) == true ||
-                viaje.sede?.ciudad?.contains(busqueda, ignoreCase = true) == true
-        !yaReservo && !esPropio && coincide
+    val viajesBase = (viajes ?: emptyList()).filter { v ->
+        if (v.estado != "disponible") return@filter false
+        val dt = try {
+            LocalDateTime.parse(v.fechaHora.substring(0, minOf(19, v.fechaHora.length)))
+        } catch (e: Exception) { null }
+        dt != null && !dt.isBefore(ahora)
     }
+    val fechas = viajesBase.map { it.fechaHora.take(10) }.distinct().sorted()
+    val viajesMostrados = if (fechaSel == null) viajesBase
+    else viajesBase.filter { it.fechaHora.take(10) == fechaSel }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Buscar viajes") },
-                actions = {
-                    IconButton(onClick = {
-                        viajeViewModel.cargarDisponibles(sesion?.idUsuario)
-                    }) {
-                        Icon(Icons.Filled.Refresh, "Actualizar")
+                title = { Text("Viajes disponibles") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.Filled.ArrowBack, null)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -60,51 +59,41 @@ fun ViajesScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
+        RefreshableContent(
+            isRefreshing = cargando,
+            onRefresh    = { viajeViewModel.cargarDisponibles() },
+            modifier     = Modifier.fillMaxSize().padding(padding)
         ) {
-            TextField(
-                value = busqueda, onValueChange = { busqueda = it },
-                placeholder = { Text("Buscar por origen o sede...") },
-                leadingIcon = { Icon(Icons.Filled.Search, null) },
-                trailingIcon = {
-                    if (busqueda.isNotEmpty())
-                        IconButton(onClick = { busqueda = "" }) {
-                            Icon(Icons.Filled.Clear, null)
-                        }
-                },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
-            )
-            Spacer(Modifier.height(8.dp))
+            Column(Modifier.fillMaxSize()) {
+                HorizontalDatePicker(fechas, fechaSel) { fechaSel = it }
+                HorizontalDivider()
 
-            if (cargando) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    if (filtrados.isEmpty()) {
-                        Box(Modifier.fillMaxWidth().padding(top = 48.dp),
-                            contentAlignment = Alignment.Center) {
-                            Text("No se encontraron viajes disponibles",
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                        }
-                    } else {
-                        filtrados.forEach { viaje ->
-                            ViajeCard(viaje = viaje) {
-                                navController.navigate("viaje_detalle/${viaje.idViaje}")
+                if (viajesMostrados.isEmpty()) {
+                    Column(modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center) {
+                        Spacer(Modifier.height(180.dp))
+                        Text("No hay viajes disponibles",
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    }
+                } else {
+                    Column(modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("${viajesMostrados.size} viaje${if (viajesMostrados.size > 1) "s" else ""}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                        viajesMostrados.forEach { v ->
+                            ViajeMiniCard(v) {
+                                navController.navigate("viaje_detalle/${v.idViaje}")
                             }
                         }
+                        Spacer(Modifier.height(16.dp))
                     }
-                    Spacer(Modifier.height(16.dp))
                 }
             }
         }

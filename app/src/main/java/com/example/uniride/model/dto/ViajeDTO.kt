@@ -8,7 +8,7 @@ data class ViajeDTO(
     val costo: Double,
     val estado: String = "disponible",
     val descripcionPunto: String? = null,
-    val tipoViaje: String = "ida",   // ✅ "ida" o "vuelta"
+    val tipoViaje: String = "ida",
     val idVehiculo: Long,
     val idSede: Long
 )

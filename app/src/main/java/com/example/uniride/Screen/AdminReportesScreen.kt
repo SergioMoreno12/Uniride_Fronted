@@ -50,16 +50,16 @@ fun AdminReportesScreen(
                         Icon(Icons.Filled.ArrowBack, null)
                     }
                 },
-                actions = {
-                    IconButton(onClick = { viewModel.cargarReportes() }) {
-                        Icon(Icons.Filled.Refresh, null)
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface)
             )
         }
     ) { padding ->
+        RefreshableContent(
+            isRefreshing = cargando,                          // estado del adminViewModel
+            onRefresh    = {viewModel.cargarReportes()},    // metodo de recarga
+            modifier     = Modifier.fillMaxSize().padding(padding)
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -153,6 +153,7 @@ fun AdminReportesScreen(
             }
             Spacer(Modifier.height(16.dp))
         }
+    }
     }
 
     reporteSeleccionado?.let { r ->

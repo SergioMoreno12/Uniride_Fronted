@@ -42,17 +42,14 @@ fun HistorialViajesScreen(
                 val vehiculos = RetrofitClient.apiService.vehiculosPorUsuario(idUsuario)
                 vehiculos.firstOrNull()?.let { vehiculo ->
                     val todos = RetrofitClient.apiService.viajesPorVehiculo(vehiculo.idVehiculo)
-                    // ✅ Compara fecha+hora completas, no solo fecha
-                    historial = todos.filter { viaje ->
+                    historial = todos.filter { v ->
                         val dt = try {
-                            val raw = viaje.fechaHora
-                            LocalDateTime.parse(raw.substring(0, minOf(19, raw.length)))
+                            LocalDateTime.parse(
+                                v.fechaHora.substring(0, minOf(19, v.fechaHora.length)))
                         } catch (e: Exception) { null }
-                        // También incluye viajes con estado "completado" o "cancelado"
-                        // aunque su fecha sea futura (ya cerraron)
                         (dt != null && dt.isBefore(ahora)) ||
-                                viaje.estado == "completado" ||
-                                viaje.estado == "cancelado"
+                                v.estado == "completado" ||
+                                v.estado == "cancelado"
                     }.sortedByDescending { it.fechaHora }
                 }
             }
@@ -71,107 +68,78 @@ fun HistorialViajesScreen(
                         Icon(Icons.Filled.ArrowBack, null)
                     }
                 },
-                actions = {
-                    IconButton(onClick = { scope.launch { cargar() } }) {
-                        Icon(Icons.Filled.Refresh, "Actualizar")
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface)
             )
         }
     ) { padding ->
-        if (cargando) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else if (historial.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        RefreshableContent(
+            isRefreshing = cargando,
+            onRefresh    = { scope.launch { cargar() } },
+            modifier     = Modifier.fillMaxSize().padding(padding)
+        ) {
+            if (historial.isEmpty()) {
+                Column(modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center) {
+                    Spacer(Modifier.height(180.dp))
                     Icon(Icons.Filled.History, null,
                         modifier = Modifier.size(64.dp),
                         tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-                    Spacer(Modifier.height(8.dp))
                     Text("Aún no tienes viajes completados",
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                 }
-            }
-        } else {
-            Column(
-                modifier = Modifier
+            } else {
+                Column(modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text("${historial.size} viajes completados",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("${historial.size} viaje${if (historial.size > 1) "s" else ""} en historial",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
 
-                historial.forEach { viaje ->
-                    Card(
-                        onClick = {
-                            navController.navigate("viaje_activo/${viaje.idViaje}")
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("${viaje.origen} → ${viaje.sede?.nombreSede ?: viaje.destino}",
-                                        fontWeight = FontWeight.SemiBold)
-                                    Text(viaje.fechaHora.take(16).replace("T", " "),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                                }
-                                AssistChip(
-                                    onClick = {},
-                                    label = {
-                                        Text(viaje.estado.replaceFirstChar { it.uppercase() },
-                                            style = MaterialTheme.typography.labelSmall)
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            when (viaje.estado) {
-                                                "completado" -> Icons.Filled.CheckCircle
-                                                "cancelado"  -> Icons.Filled.Cancel
-                                                else         -> Icons.Filled.History
-                                            },
-                                            null,
-                                            modifier = Modifier.size(14.dp),
-                                            tint = when (viaje.estado) {
-                                                "completado" -> MaterialTheme.colorScheme.secondary
-                                                "cancelado"  -> MaterialTheme.colorScheme.error
-                                                else         -> MaterialTheme.colorScheme.primary
-                                            })
+                    historial.forEach { viaje ->
+                        val estadoMostrado = when {
+                            viaje.estado == "cancelado" -> "cancelado"
+                            else -> "completado"
+                        }
+                        Card(
+                            onClick = { navController.navigate("viaje_activo/${viaje.idViaje}") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("${viaje.origen} → ${viaje.destino}",
+                                            fontWeight = FontWeight.SemiBold)
+                                        Text(viaje.fechaHora.take(16).replace("T", " "),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                                     }
-                                )
-                            }
-                            Spacer(Modifier.height(6.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.DirectionsCar, null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("${viaje.vehiculo?.marca} ${viaje.vehiculo?.modelo}",
-                                    style = MaterialTheme.typography.bodySmall)
-                                Spacer(Modifier.width(12.dp))
-                                Icon(Icons.Filled.AttachMoney, null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(14.dp))
-                                Text("${"%.0f".format(viaje.costo)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold)
+                                    Icon(
+                                        if (estadoMostrado == "cancelado") Icons.Filled.Cancel
+                                        else Icons.Filled.CheckCircle,
+                                        null,
+                                        tint = if (estadoMostrado == "cancelado")
+                                            MaterialTheme.colorScheme.error
+                                        else MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(20.dp))
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Text("Toca para ver pasajeros y comentarios",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
                             }
                         }
                     }
+                    Spacer(Modifier.height(16.dp))
                 }
-                Spacer(Modifier.height(16.dp))
             }
         }
     }

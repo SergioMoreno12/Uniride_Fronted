@@ -39,6 +39,9 @@ android {
 }
 
 dependencies {
+    implementation(platform("androidx.compose:compose-bom:2024.10.01"))
+    implementation("androidx.compose.material3:material3:1.3.1")
+    implementation("androidx.compose.foundation:foundation:1.7.5")
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation("io.coil-kt:coil-compose:2.5.0")
     implementation(libs.coil.compose)
@@ -60,6 +63,7 @@ dependencies {
     implementation(libs.lifecycle.livedata.ktx)
     implementation(libs.androidx.runtime.livedata)
     implementation(libs.androidx.navigation.compose)
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.0")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

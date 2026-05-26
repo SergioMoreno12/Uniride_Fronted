@@ -24,6 +24,7 @@ import com.example.uniride.ViewModel.ViajeViewModel
 import com.example.uniride.model.Viaje
 import com.example.uniride.ui.theme.Routes
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,7 +32,8 @@ fun MisViajesScreen(
     navController: NavController,
     authViewModel: AuthViewModel       = viewModel(),
     viajeViewModel: ViajeViewModel     = viewModel(),
-    reservaViewModel: ReservaViewModel = viewModel()
+    reservaViewModel: ReservaViewModel = viewModel(),
+    onPublicarViaje: () -> Unit = {}
 ) {
     val sesion    = authViewModel.sesionActual
     val misViajes by viajeViewModel.misViajes.observeAsState(emptyList())
@@ -39,16 +41,9 @@ fun MisViajesScreen(
     val mensaje   by viajeViewModel.mensaje.observeAsState(null)
     val context   = LocalContext.current
     val scope     = rememberCoroutineScope()
+    val ahora     = LocalDateTime.now()
 
     var viajeACancelar by remember { mutableStateOf<Viaje?>(null) }
-    var viajeAEditar   by remember { mutableStateOf<Viaje?>(null) }
-    var editOrigen     by remember { mutableStateOf("") }
-    var editFecha      by remember { mutableStateOf("") }
-    var editHora       by remember { mutableStateOf("06") }
-    var editMin        by remember { mutableStateOf("00") }
-    var editAmPm       by remember { mutableStateOf("AM") }
-    var editCosto      by remember { mutableStateOf("") }
-    var editPunto      by remember { mutableStateOf("") }
 
     suspend fun cargarViajes() {
         sesion?.idUsuario?.let { idUsuario ->
@@ -67,9 +62,7 @@ fun MisViajesScreen(
         mensaje?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
             viajeViewModel.limpiarMensaje()
-            if (it.contains("cancelado") || it.contains("actualizado")) {
-                cargarViajes()
-            }
+            if (it.contains("cancelado") || it.contains("actualizado")) cargarViajes()
         }
     }
 
@@ -81,114 +74,115 @@ fun MisViajesScreen(
                     IconButton(onClick = { navController.navigate(Routes.HISTORIAL_VIAJES) }) {
                         Icon(Icons.Filled.History, "Historial")
                     }
-                    IconButton(onClick = { scope.launch { cargarViajes() } }) {
-                        Icon(Icons.Filled.Refresh, "Actualizar")
-                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface)
             )
-        },
-        bottomBar = {
-            BottomNavBar(currentRoute = "mis_viajes", rol = "conductor") { route ->
-                navController.navigate(route) {
-                    popUpTo(Routes.HOME) { saveState = true }
-                    launchSingleTop = true; restoreState = true
-                }
-            }
         }
     ) { padding ->
-        if (cargando) {
-            Box(Modifier.fillMaxSize().padding(padding),
-                contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else {
-            val lista = (misViajes ?: emptyList())
-                .filter { it.estado != "cancelado" && it.estado != "completado" }
-                .sortedByDescending { it.fechaHora }
+        RefreshableContent(
+            isRefreshing = cargando,
+            onRefresh    = { scope.launch { cargarViajes() } },
+            modifier     = Modifier.fillMaxSize().padding(padding)
+        ) {
+            val activos = (misViajes ?: emptyList()).filter { v ->
+                if (v.estado == "cancelado" || v.estado == "completado") return@filter false
+                val dt = try {
+                    LocalDateTime.parse(v.fechaHora.substring(0, minOf(19, v.fechaHora.length)))
+                } catch (e: Exception) { null }
+                dt != null && !dt.isBefore(ahora)
+            }.sortedBy { it.fechaHora }
 
-            if (lista.isEmpty()) {
-                Box(Modifier.fillMaxSize().padding(padding),
-                    contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Filled.DirectionsCar, null,
-                            modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-                        Spacer(Modifier.height(8.dp))
-                        Text("No tienes viajes publicados",
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                        Spacer(Modifier.height(16.dp))
-                        Button(
-                            onClick = { navController.navigate(Routes.PUBLICAR) },
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Filled.Add, null)
-                            Spacer(Modifier.width(6.dp))
-                            Text("Publicar viaje")
-                        }
+            if (activos.isEmpty()) {
+                Column(modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Spacer(Modifier.height(180.dp))
+                    Icon(Icons.Filled.DirectionsCar, null,
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                    Spacer(Modifier.height(8.dp))
+                    Text("No tienes viajes activos",
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    Text("Desliza hacia abajo para recargar",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                    Spacer(Modifier.height(12.dp))
+                    TextButton(onClick = {
+                        navController.navigate(Routes.HISTORIAL_VIAJES)
+                    }) { Text("Ver historial de viajes") }
+                    Button(
+                        onClick = { onPublicarViaje() },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Filled.Add, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Publicar viaje")
                     }
                 }
             } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                        .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
+                Column(modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    lista.forEach { viaje ->
+                    Text("${activos.size} viaje${if (activos.size > 1) "s" else ""} activo${if (activos.size > 1) "s" else ""}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+
+                    activos.forEach { viaje ->
                         Card(
-                            onClick = {
-                                navController.navigate("viaje_activo/${viaje.idViaje}")
-                            },
+                            onClick = { navController.navigate("viaje_activo/${viaje.idViaje}") },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(16.dp),
                             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
+                                Row(modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                                    verticalAlignment = Alignment.CenterVertically) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            "${viaje.origen} → ${viaje.sede?.nombreSede ?: viaje.destino}",
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                        Text(
-                                            "📅 ${viaje.fechaHora.take(10)}  " +
-                                                    "🕐 ${if (viaje.fechaHora.length >= 16)
-                                                        viaje.fechaHora.substring(11, 16) else "--:--"}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                        )
-                                        if (!viaje.horaLlegada.isNullOrBlank()) {
-                                            Text(
-                                                "🏁 Llegada: ${if (viaje.horaLlegada.length >= 16)
-                                                    viaje.horaLlegada.substring(11, 16) else "--:--"}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.8f)
-                                            )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            AssistChip(onClick = {},
+                                                label = {
+                                                    Text(if (viaje.tipoViaje == "vuelta") "Vuelta" else "Ida",
+                                                        style = MaterialTheme.typography.labelSmall)
+                                                },
+                                                leadingIcon = {
+                                                    Icon(if (viaje.tipoViaje == "vuelta")
+                                                        Icons.Filled.Home else Icons.Filled.School,
+                                                        null, modifier = Modifier.size(12.dp))
+                                                })
                                         }
-                                        Text(
-                                            "$ ${"%.0f".format(viaje.costo)} · ${viaje.vehiculo?.capacidad} puestos",
+                                        Spacer(Modifier.height(4.dp))
+                                        Text("${viaje.origen} → ${viaje.destino}",
+                                            fontWeight = FontWeight.SemiBold)
+                                        Text("📅 ${viaje.fechaHora.take(10)}  " +
+                                                "🕐 ${if (viaje.fechaHora.length >= 16)
+                                                    viaje.fechaHora.substring(11, 16) else "--:--"}",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                        if (!viaje.horaLlegada.isNullOrBlank()) {
+                                            Text("🏁 Llegada: ${if (viaje.horaLlegada.length >= 16)
+                                                viaje.horaLlegada.substring(11, 16) else "--:--"}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.8f))
+                                        }
+                                        Text("$ ${"%.0f".format(viaje.costo)} · " +
+                                                "${viaje.vehiculo?.capacidad} puestos",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.primary)
                                     }
                                     Column(horizontalAlignment = Alignment.End) {
-                                        AssistChip(
-                                            onClick = {},
-                                            label = {
-                                                Text(viaje.estado.replaceFirstChar { it.uppercase() },
-                                                    style = MaterialTheme.typography.labelSmall)
-                                            }
-                                        )
+                                        AssistChip(onClick = {},
+                                            label = { Text(viaje.estado.replaceFirstChar { it.uppercase() },
+                                                style = MaterialTheme.typography.labelSmall) })
                                         Spacer(Modifier.height(4.dp))
-                                        Icon(Icons.Filled.ChevronRight, "Ver detalle",
+                                        Icon(Icons.Filled.ChevronRight, null,
                                             tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
                                     }
                                 }
@@ -197,60 +191,36 @@ fun MisViajesScreen(
                                 HorizontalDivider()
                                 Spacer(Modifier.height(8.dp))
 
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    if (viaje.estado == "disponible" || viaje.estado == "lleno") {
-                                        OutlinedButton(
-                                            onClick = {
-                                                viajeAEditar = viaje
-                                                editOrigen  = viaje.origen
-                                                editFecha   = viaje.fechaHora.take(10)
-                                                // Parsear hora (formato 24h)
-                                                val h24 = viaje.fechaHora
-                                                    .substring(11, 13).toIntOrNull() ?: 6
-                                                val mm  = viaje.fechaHora
-                                                    .substring(14, 16)
-                                                editHora = when {
-                                                    h24 == 0  -> "12"
-                                                    h24 > 12  -> "%02d".format(h24 - 12)
-                                                    else      -> "%02d".format(h24)
-                                                }
-                                                editMin   = mm
-                                                editAmPm  = if (h24 >= 12) "PM" else "AM"
-                                                editCosto = viaje.costo.toInt().toString()
-                                                editPunto = viaje.descripcionPunto ?: ""
-                                            },
-                                            modifier = Modifier.weight(1f)
-                                        ) {
-                                            Icon(Icons.Filled.Edit, null,
-                                                modifier = Modifier.size(16.dp))
-                                            Spacer(Modifier.width(4.dp))
-                                            Text("Editar",
-                                                style = MaterialTheme.typography.labelSmall)
-                                        }
-                                        OutlinedButton(
-                                            onClick = { viajeACancelar = viaje },
-                                            modifier = Modifier.weight(1f),
-                                            colors = ButtonDefaults.outlinedButtonColors(
-                                                contentColor = MaterialTheme.colorScheme.error)
-                                        ) {
-                                            Icon(Icons.Filled.Cancel, null,
-                                                modifier = Modifier.size(16.dp))
-                                            Spacer(Modifier.width(4.dp))
-                                            Text("Cancelar",
-                                                style = MaterialTheme.typography.labelSmall)
-                                        }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            navController.navigate("editar_viaje/${viaje.idViaje}")
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(Icons.Filled.Edit, null,
+                                            modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Editar", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                    OutlinedButton(
+                                        onClick = { viajeACancelar = viaje },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = MaterialTheme.colorScheme.error)
+                                    ) {
+                                        Icon(Icons.Filled.Cancel, null,
+                                            modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Cancelar", style = MaterialTheme.typography.labelSmall)
                                     }
                                 }
 
-                                Text(
-                                    "Toca para ver pasajeros y detalles",
+                                Text("Toca para ver pasajeros y detalles",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                                    modifier = Modifier.padding(top = 4.dp)
-                                )
+                                    modifier = Modifier.padding(top = 4.dp))
                             }
                         }
                     }
@@ -260,17 +230,12 @@ fun MisViajesScreen(
         }
     }
 
-    // ── Cancelar viaje ────────────────────────────────────────────────
     viajeACancelar?.let { v ->
         AlertDialog(
             onDismissRequest = { viajeACancelar = null },
             shape = RoundedCornerShape(20.dp),
             title = { Text("Cancelar viaje") },
-            text = {
-                Text("¿Cancelar el viaje de ${v.origen} a " +
-                        "${v.sede?.nombreSede ?: v.destino} " +
-                        "del ${v.fechaHora.take(10)}?")
-            },
+            text  = { Text("¿Cancelar el viaje de ${v.origen} a ${v.destino}?") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -283,112 +248,6 @@ fun MisViajesScreen(
             },
             dismissButton = {
                 TextButton(onClick = { viajeACancelar = null }) { Text("No, volver") }
-            }
-        )
-    }
-
-    // ── Editar viaje (con DatePicker y selector de hora) ──────────────
-    viajeAEditar?.let { v ->
-        AlertDialog(
-            onDismissRequest = { viajeAEditar = null },
-            shape = RoundedCornerShape(20.dp),
-            title = { Text("Editar viaje") },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.verticalScroll(rememberScrollState())
-                ) {
-                    TextField(
-                        value = editOrigen, onValueChange = { editOrigen = it },
-                        label = { Text("Ciudad de origen") }, singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-
-                    // DatePicker
-                    DateTimePickerField(
-                        label = "Fecha del viaje",
-                        value = editFecha,
-                        onDateSelected = { editFecha = it.take(10) },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    // Selector de hora 12h
-                    Text("Hora de salida",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = editHora,
-                            onValueChange = { v2 ->
-                                val n = v2.toIntOrNull()
-                                if (n != null && n in 1..12) editHora = "%02d".format(n)
-                                else if (v2.isEmpty()) editHora = ""
-                            },
-                            label = { Text("HH") }, singleLine = true,
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        Text(":", fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleLarge)
-                        OutlinedTextField(
-                            value = editMin,
-                            onValueChange = { v2 ->
-                                val n = v2.toIntOrNull()
-                                if (n != null && n in 0..59) editMin = "%02d".format(n)
-                                else if (v2.isEmpty()) editMin = ""
-                            },
-                            label = { Text("MM") }, singleLine = true,
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        Column {
-                            listOf("AM", "PM").forEach { ap ->
-                                FilterChip(
-                                    selected = editAmPm == ap,
-                                    onClick  = { editAmPm = ap },
-                                    label    = { Text(ap, style = MaterialTheme.typography.labelSmall) },
-                                    modifier = Modifier.height(32.dp))
-                            }
-                        }
-                    }
-
-                    TextField(
-                        value = editCosto, onValueChange = { editCosto = it.filter { c -> c.isDigit() } },
-                        label = { Text("Costo por puesto") }, singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-
-                    TextField(
-                        value = editPunto, onValueChange = { editPunto = it },
-                        label = { Text("Punto de encuentro") }, maxLines = 2,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                }
-            },
-            confirmButton = {
-                Button(onClick = {
-                    val h12  = editHora.toIntOrNull() ?: 6
-                    val mm   = editMin.toIntOrNull() ?: 0
-                    val h24  = when {
-                        editAmPm == "AM" && h12 == 12 -> 0
-                        editAmPm == "PM" && h12 != 12 -> h12 + 12
-                        else -> h12
-                    }
-                    val fechaSalida = "$editFecha" + "T%02d:%02d:00".format(h24, mm)
-                    viajeViewModel.editarViaje(
-                        v.idViaje, editOrigen, v.destino, fechaSalida,
-                        editCosto.toDoubleOrNull() ?: v.costo,
-                        v.sede?.idSede ?: 0L
-                    )
-                    viajeAEditar = null
-                }) { Text("Guardar") }
-            },
-            dismissButton = {
-                TextButton(onClick = { viajeAEditar = null }) { Text("Cancelar") }
             }
         )
     }

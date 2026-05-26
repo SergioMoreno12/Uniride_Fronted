@@ -3,6 +3,7 @@ package com.example.uniride.ViewModel
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.uniride.model.dto.CambiarContrasenaDTO
 import com.example.uniride.interfaces.RetrofitClient
 import com.example.uniride.model.Usuario
 import com.example.uniride.model.Vehiculo
@@ -79,7 +80,7 @@ class PerfilViewModel : ViewModel() {
                 withContext(Dispatchers.IO) {
                     RetrofitClient.apiService.cambiarContrasena(
                         idUsuario,
-                        mapOf("contrasenaActual" to actual, "contrasenaNueva" to nueva)
+                        CambiarContrasenaDTO(actual, nueva)
                     )
                 }
                 _mensaje.postValue("Contraseña cambiada con éxito")

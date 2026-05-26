@@ -199,7 +199,7 @@ fun LoginScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
                     }
-                    Text("Selecciona tu rol al registrarte. Cada rol requiere una cuenta.",
+                    Text("Selecciona tu rol al registrarte.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                         textAlign = TextAlign.Center,

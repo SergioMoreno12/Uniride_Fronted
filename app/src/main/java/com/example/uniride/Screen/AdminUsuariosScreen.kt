@@ -61,16 +61,16 @@ fun AdminUsuariosScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
                     }
                 },
-                actions = {
-                    IconButton(onClick = { adminViewModel.cargarUsuarios() }) {
-                        Icon(Icons.Filled.Refresh, "Actualizar")
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface)
             )
         }
     ) { padding ->
+        RefreshableContent(
+            isRefreshing = cargando,                          // estado del adminViewModel
+            onRefresh    = { adminViewModel.cargarUsuarios() },    // metodo de recarga
+            modifier     = Modifier.fillMaxSize().padding(padding)
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -238,4 +238,5 @@ fun AdminUsuariosScreen(
             }
         }
     }
+}
 }

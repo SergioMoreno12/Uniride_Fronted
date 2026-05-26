@@ -45,7 +45,6 @@ fun ViajeActivoDetalleScreen(
     var viajeACompletar by remember { mutableStateOf(false) }
     var viajeACancelar  by remember { mutableStateOf(false) }
 
-    // ✅ Ahora SÍ observa LiveData del ViewModel (antes el observeAsState dead la anulaba)
     val mensaje by reservaViewModel.mensaje.observeAsState(null)
 
     suspend fun recargar() {
@@ -84,29 +83,28 @@ fun ViajeActivoDetalleScreen(
                         Icon(Icons.Filled.ArrowBack, null)
                     }
                 },
-                actions = {
-                    IconButton(onClick = { scope.launch { recargar() } }) {
-                        Icon(Icons.Filled.Refresh, "Actualizar")
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface)
             )
         }
     ) { padding ->
-        if (cargando) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+        RefreshableContent(
+            isRefreshing = cargando,
+            onRefresh    = { scope.launch { recargar() } },
+            modifier     = Modifier.fillMaxSize().padding(padding)
+        ) {
+            if (cargando) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                 viaje?.let { v ->
                     Card(modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp)) {
@@ -326,6 +324,7 @@ fun ViajeActivoDetalleScreen(
             }
         }
     }
+}
 }
 
 @Composable

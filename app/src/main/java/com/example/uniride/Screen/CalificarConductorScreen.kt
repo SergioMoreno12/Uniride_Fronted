@@ -98,7 +98,7 @@ fun CalificarConductorScreen(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                 Spacer(Modifier.height(24.dp))
                 Button(
-                    onClick = { volverInicio() }, // ✅ navegación corregida
+                    onClick = { volverInicio() },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) { Text("Volver al inicio") }
@@ -181,7 +181,7 @@ fun CalificarConductorScreen(
                                 cargando = false
                                 Toast.makeText(context, "¡Gracias por tu calificación!",
                                     Toast.LENGTH_SHORT).show()
-                                volverInicio() // ✅ navegación corregida
+                                volverInicio() //
                             } catch (e: Exception) {
                                 cargando = false
                                 Toast.makeText(context, e.message ?: "Error al calificar",

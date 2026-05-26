@@ -21,15 +21,18 @@ import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ViewModel.ViajeViewModel
 import com.example.uniride.interfaces.RetrofitClient
 import com.example.uniride.model.dto.ViajeDTO
-import com.example.uniride.ui.theme.Routes
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PublicarViajeScreen(
     navController: NavController,
     authViewModel: AuthViewModel   = viewModel(),
-    viajeViewModel: ViajeViewModel = viewModel()
+    viajeViewModel: ViajeViewModel = viewModel(),
+    onViajePublicado: () -> Unit = {}
 ) {
     val sesion   = authViewModel.sesionActual
     val sedes    by viajeViewModel.sedes.observeAsState(emptyList())
@@ -38,14 +41,10 @@ fun PublicarViajeScreen(
     val context  = LocalContext.current
     val scope    = rememberCoroutineScope()
 
-    // ✅ Tipo de viaje: "ida" o "vuelta"
     var tipoViaje by remember { mutableStateOf("ida") }
-
-    // Texto libre para la ciudad (origen si ida, destino si vuelta)
-    var ciudad   by remember { mutableStateOf("") }
+    var ciudad    by remember { mutableStateOf("") }
     var fechaHora by remember { mutableStateOf("") }
 
-    // ✅ Estados de hora como STRING para que se puedan editar libremente
     var horaSalidaHoraTxt  by remember { mutableStateOf("06") }
     var horaSalidaMinTxt   by remember { mutableStateOf("00") }
     var horaSalidaAMPM     by remember { mutableStateOf("AM") }
@@ -59,8 +58,7 @@ fun PublicarViajeScreen(
     var idVehiculo       by remember { mutableStateOf<Long?>(null) }
     var error            by remember { mutableStateOf<String?>(null) }
 
-    // Helper: convierte hora 12h a "HH:mm" 24h
-    fun to24h(horaTxt: String, minTxt: String, ampm: String): String {
+    fun to24h(horaTxt: String, minTxt: String, ampm: String): Pair<Int, Int> {
         val h12 = horaTxt.toIntOrNull()?.coerceIn(1, 12) ?: 12
         val mm  = minTxt.toIntOrNull()?.coerceIn(0, 59) ?: 0
         val h24 = when {
@@ -68,7 +66,7 @@ fun PublicarViajeScreen(
             ampm == "PM" && h12 != 12 -> h12 + 12
             else -> h12
         }
-        return "%02d:%02d".format(h24, mm)
+        return h24 to mm
     }
 
     LaunchedEffect(true) {
@@ -85,8 +83,8 @@ fun PublicarViajeScreen(
         mensaje?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
             viajeViewModel.limpiarMensaje()
-            if (it.contains("éxito")) navController.navigate(Routes.MIS_VIAJES) {
-                popUpTo(Routes.PUBLICAR) { inclusive = true }
+            if (it.contains("éxito")) {
+                onViajePublicado()
             }
         }
     }
@@ -95,22 +93,9 @@ fun PublicarViajeScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Publicar viaje") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Filled.ArrowBack, null)
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface)
             )
-        },
-        bottomBar = {
-            BottomNavBar(currentRoute = "publicar", rol = "conductor") { route ->
-                navController.navigate(route) {
-                    popUpTo(Routes.HOME) { saveState = true }
-                    launchSingleTop = true; restoreState = true
-                }
-            }
         }
     ) { padding ->
         Column(
@@ -136,23 +121,16 @@ fun PublicarViajeScreen(
                 }
             }
 
-            // ════════════════════════════════════════════════════════════════
-            // ✅ NUEVO: Selector de tipo de viaje
-            // ════════════════════════════════════════════════════════════════
             Text("Tipo de viaje", fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary)
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = tipoViaje == "ida",
                     onClick  = { tipoViaje = "ida" },
                     label    = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.School, null,
-                                modifier = Modifier.size(16.dp))
+                            Icon(Icons.Filled.School, null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
                             Text("Ida (a la U)")
                         }
@@ -164,8 +142,7 @@ fun PublicarViajeScreen(
                     onClick  = { tipoViaje = "vuelta" },
                     label    = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Home, null,
-                                modifier = Modifier.size(16.dp))
+                            Icon(Icons.Filled.Home, null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
                             Text("Vuelta (desde la U)")
                         }
@@ -174,16 +151,10 @@ fun PublicarViajeScreen(
                 )
             }
 
-            // Aclaración del tipo
-            Card(
-                shape = RoundedCornerShape(10.dp),
+            Card(shape = RoundedCornerShape(10.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))) {
+                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Info, null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(18.dp))
@@ -199,45 +170,29 @@ fun PublicarViajeScreen(
             }
 
             HorizontalDivider()
-
             Text("Ruta del viaje", fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary)
 
-            // ════════════════════════════════════════════════════════════════
-            // ✅ UI condicional: ida vs vuelta
-            // ════════════════════════════════════════════════════════════════
             if (tipoViaje == "ida") {
-                // IDA: ciudad → sede
-                TextField(
-                    value = ciudad, onValueChange = { ciudad = it },
+                TextField(value = ciudad, onValueChange = { ciudad = it },
                     label = { Text("Ciudad de origen") },
                     leadingIcon = { Icon(Icons.Filled.LocationCity, null) },
                     placeholder = { Text("Ej: Bogotá, Fusagasugá...") },
                     singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                SedeDropdown(
-                    sedes = sedes ?: emptyList(),
+                    shape = RoundedCornerShape(12.dp))
+                SedeDropdown(sedes = sedes ?: emptyList(),
                     seleccionada = sedeSeleccionada,
-                    onSelect = { sedeSeleccionada = it }
-                )
+                    onSelect = { sedeSeleccionada = it })
             } else {
-                // VUELTA: sede → ciudad
-                SedeDropdown(
-                    sedes = sedes ?: emptyList(),
+                SedeDropdown(sedes = sedes ?: emptyList(),
                     seleccionada = sedeSeleccionada,
-                    onSelect = { sedeSeleccionada = it }
-                )
-
-                TextField(
-                    value = ciudad, onValueChange = { ciudad = it },
+                    onSelect = { sedeSeleccionada = it })
+                TextField(value = ciudad, onValueChange = { ciudad = it },
                     label = { Text("Ciudad de destino") },
                     leadingIcon = { Icon(Icons.Filled.LocationCity, null) },
                     placeholder = { Text("Ej: Bogotá, Fusagasugá...") },
                     singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                )
+                    shape = RoundedCornerShape(12.dp))
             }
 
             HorizontalDivider()
@@ -248,106 +203,58 @@ fun PublicarViajeScreen(
                 label = "Fecha del viaje",
                 value = fechaHora.take(10),
                 onDateSelected = { fechaHora = it },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                minDate = LocalDate.now()
             )
 
             HorizontalDivider()
             Text("Horario", fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary)
 
-            // ════════════════════════════════════════════════════════════════
-            // ✅ Hora de salida (campos STRING, editables sin trabas)
-            // ════════════════════════════════════════════════════════════════
             Text("Hora de salida",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = horaSalidaHoraTxt,
-                    onValueChange = { v ->
-                        // ✅ Permite vacío y dígitos, máximo 2 caracteres
-                        val cleaned = v.filter { it.isDigit() }.take(2)
-                        horaSalidaHoraTxt = cleaned
-                    },
-                    label = { Text("HH") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
-                )
-                Text(":", fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleLarge)
-                OutlinedTextField(
-                    value = horaSalidaMinTxt,
-                    onValueChange = { v ->
-                        val cleaned = v.filter { it.isDigit() }.take(2)
-                        horaSalidaMinTxt = cleaned
-                    },
-                    label = { Text("MM") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(value = horaSalidaHoraTxt,
+                    onValueChange = { horaSalidaHoraTxt = it.filter { c -> c.isDigit() }.take(2) },
+                    label = { Text("HH") }, singleLine = true,
+                    modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp))
+                Text(":", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                OutlinedTextField(value = horaSalidaMinTxt,
+                    onValueChange = { horaSalidaMinTxt = it.filter { c -> c.isDigit() }.take(2) },
+                    label = { Text("MM") }, singleLine = true,
+                    modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp))
                 Column {
                     listOf("AM", "PM").forEach { ampm ->
-                        FilterChip(
-                            selected = horaSalidaAMPM == ampm,
+                        FilterChip(selected = horaSalidaAMPM == ampm,
                             onClick  = { horaSalidaAMPM = ampm },
-                            label    = {
-                                Text(ampm,
-                                    style = MaterialTheme.typography.labelSmall)
-                            },
-                            modifier = Modifier.height(32.dp)
-                        )
+                            label    = { Text(ampm, style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.height(32.dp))
                     }
                 }
             }
 
-            // Hora de llegada
             Text("Hora de llegada",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = horaLlegadaHoraTxt,
-                    onValueChange = { v ->
-                        val cleaned = v.filter { it.isDigit() }.take(2)
-                        horaLlegadaHoraTxt = cleaned
-                    },
-                    label = { Text("HH") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
-                )
-                Text(":", fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleLarge)
-                OutlinedTextField(
-                    value = horaLlegadaMinTxt,
-                    onValueChange = { v ->
-                        val cleaned = v.filter { it.isDigit() }.take(2)
-                        horaLlegadaMinTxt = cleaned
-                    },
-                    label = { Text("MM") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(value = horaLlegadaHoraTxt,
+                    onValueChange = { horaLlegadaHoraTxt = it.filter { c -> c.isDigit() }.take(2) },
+                    label = { Text("HH") }, singleLine = true,
+                    modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp))
+                Text(":", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                OutlinedTextField(value = horaLlegadaMinTxt,
+                    onValueChange = { horaLlegadaMinTxt = it.filter { c -> c.isDigit() }.take(2) },
+                    label = { Text("MM") }, singleLine = true,
+                    modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp))
                 Column {
                     listOf("AM", "PM").forEach { ampm ->
-                        FilterChip(
-                            selected = horaLlegadaAMPM == ampm,
+                        FilterChip(selected = horaLlegadaAMPM == ampm,
                             onClick  = { horaLlegadaAMPM = ampm },
-                            label    = {
-                                Text(ampm,
-                                    style = MaterialTheme.typography.labelSmall)
-                            },
-                            modifier = Modifier.height(32.dp)
-                        )
+                            label    = { Text(ampm, style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.height(32.dp))
                     }
                 }
             }
@@ -356,37 +263,28 @@ fun PublicarViajeScreen(
             Text("Detalles", fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary)
 
-            TextField(
-                value = costo,
+            TextField(value = costo,
                 onValueChange = { costo = it.filter { c -> c.isDigit() } },
                 label = { Text("Costo por puesto ($)") },
                 leadingIcon = { Icon(Icons.Filled.AttachMoney, null) },
                 singleLine = true, modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            )
+                shape = RoundedCornerShape(12.dp))
 
-            TextField(
-                value = descripcionPunto, onValueChange = { descripcionPunto = it },
+            TextField(value = descripcionPunto, onValueChange = { descripcionPunto = it },
                 label = { Text("Punto de encuentro") },
                 leadingIcon = { Icon(Icons.Filled.Place, null) },
                 placeholder = {
-                    Text(
-                        if (tipoViaje == "ida")
-                            "¿Dónde recoges a los pasajeros en la ciudad?"
-                        else
-                            "¿Dónde recoges a los pasajeros en la universidad?"
-                    )
+                    Text(if (tipoViaje == "ida")
+                        "¿Dónde recoges a los pasajeros en la ciudad?"
+                    else "¿Dónde recoges a los pasajeros en la universidad?")
                 },
                 maxLines = 3, modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            )
+                shape = RoundedCornerShape(12.dp))
 
             error?.let {
-                Card(
-                    shape = RoundedCornerShape(10.dp),
+                Card(shape = RoundedCornerShape(10.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer)
-                ) {
+                        containerColor = MaterialTheme.colorScheme.errorContainer)) {
                     Row(modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.Error, null,
@@ -401,11 +299,9 @@ fun PublicarViajeScreen(
 
             Button(
                 onClick = {
-                    // ── Validaciones del formulario ──
                     if (ciudad.isBlank()) {
                         error = if (tipoViaje == "ida")
-                            "Ingresa la ciudad de origen"
-                        else "Ingresa la ciudad de destino"
+                            "Ingresa la ciudad de origen" else "Ingresa la ciudad de destino"
                         return@Button
                     }
                     if (sedeSeleccionada == null) {
@@ -421,29 +317,32 @@ fun PublicarViajeScreen(
                         error = "Registra tu vehículo primero"; return@Button
                     }
 
-                    // Validar que las horas tengan valor
-                    val hSal  = horaSalidaHoraTxt.toIntOrNull()
-                    val mSal  = horaSalidaMinTxt.toIntOrNull()
-                    val hLleg = horaLlegadaHoraTxt.toIntOrNull()
-                    val mLleg = horaLlegadaMinTxt.toIntOrNull()
-                    if (hSal == null || hSal !in 1..12 ||
-                        mSal == null || mSal !in 0..59) {
-                        error = "Hora de salida inválida (HH 1-12, MM 0-59)"
+                    val (hSal24, mSal)   = to24h(horaSalidaHoraTxt,  horaSalidaMinTxt,  horaSalidaAMPM)
+                    val (hLleg24, mLleg) = to24h(horaLlegadaHoraTxt, horaLlegadaMinTxt, horaLlegadaAMPM)
+
+                    val fechaSeleccionada = try { LocalDate.parse(fechaHora.take(10)) }
+                    catch (e: Exception) { null }
+                    if (fechaSeleccionada == null) {
+                        error = "Fecha inválida"; return@Button
+                    }
+
+                    val dtSalida  = LocalDateTime.of(fechaSeleccionada, LocalTime.of(hSal24, mSal))
+                    val dtLlegada = LocalDateTime.of(fechaSeleccionada, LocalTime.of(hLleg24, mLleg))
+                    val ahora     = LocalDateTime.now()
+
+                    if (dtSalida.isBefore(ahora)) {
+                        error = "La hora de salida ya pasó. Elige una hora futura."
                         return@Button
                     }
-                    if (hLleg == null || hLleg !in 1..12 ||
-                        mLleg == null || mLleg !in 0..59) {
-                        error = "Hora de llegada inválida (HH 1-12, MM 0-59)"
+                    if (!dtLlegada.isAfter(dtSalida)) {
+                        error = "La hora de llegada debe ser posterior a la de salida"
                         return@Button
                     }
                     error = null
 
-                    val salida24  = to24h(horaSalidaHoraTxt,  horaSalidaMinTxt,  horaSalidaAMPM)
-                    val llegada24 = to24h(horaLlegadaHoraTxt, horaLlegadaMinTxt, horaLlegadaAMPM)
-                    val fechaSalida  = "${fechaHora.take(10)}T$salida24:00"
-                    val fechaLlegada = "${fechaHora.take(10)}T$llegada24:00"
+                    val fechaSalida  = "${fechaHora.take(10)}T%02d:%02d:00".format(hSal24, mSal)
+                    val fechaLlegada = "${fechaHora.take(10)}T%02d:%02d:00".format(hLleg24, mLleg)
 
-                    // ✅ Armar origen y destino según el tipo
                     val origenFinal  = if (tipoViaje == "ida")
                         ciudad else sedeSeleccionada!!.nombreSede
                     val destinoFinal = if (tipoViaje == "ida")
@@ -459,7 +358,7 @@ fun PublicarViajeScreen(
                                 costo            = costo.toDoubleOrNull() ?: 0.0,
                                 estado           = "disponible",
                                 descripcionPunto = descripcionPunto.ifBlank { null },
-                                tipoViaje        = tipoViaje,        // ✅
+                                tipoViaje        = tipoViaje,
                                 idVehiculo       = idVehiculo!!,
                                 idSede           = sedeSeleccionada!!.idSede
                             )

@@ -22,10 +22,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.uniride.ViewModel.AuthViewModel
-import com.example.uniride.interfaces.RetrofitClient
-import com.example.uniride.model.dto.UsuarioDTO
 import com.example.uniride.ui.theme.Routes
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,11 +36,22 @@ fun RegisterScreen(
     var contrasena by remember { mutableStateOf("") }
     var rol        by remember { mutableStateOf("pasajero") }
     var verPass    by remember { mutableStateOf(false) }
-    var cargando   by remember { mutableStateOf(false) }
-    var errorMsg   by remember { mutableStateOf<String?>(null) }
 
-    val context = LocalContext.current
-    val scope   = rememberCoroutineScope()
+    val context         = LocalContext.current
+
+    val cargando    by viewModel.registroCargando.observeAsState(false)
+    val registroOk  by viewModel.registroExito.observeAsState(false)
+    val errorMsg    by viewModel.registroError.observeAsState(null)
+
+    LaunchedEffect(registroOk) {
+        if (registroOk) {
+            Toast.makeText(context, "¡Cuenta creada! Inicia sesión", Toast.LENGTH_SHORT).show()
+            viewModel.limpiarRegistro()
+            navController.navigate(Routes.LOGIN) {
+                popUpTo(Routes.REGISTER) { inclusive = true }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -67,36 +75,42 @@ fun RegisterScreen(
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("Únete a UniRide",
+            Text(
+                "Únete a UniRide",
                 style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold)
-            Text("Completa tus datos para registrarte",
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "Completa tus datos para registrarte",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
 
             Spacer(Modifier.height(4.dp))
 
-            // ── Nombre ─────────────────────────────────────────────────
+            // ── Nombre ──────────────────────────────────────────────────
             TextField(
                 value = nombre, onValueChange = { nombre = it },
                 label = { Text("Nombre completo") },
                 leadingIcon = { Icon(Icons.Filled.Person, null) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                isError = nombre.isBlank() && cargando
             )
 
-            // ── Correo ─────────────────────────────────────────────────
+            // ── Correo ──────────────────────────────────────────────────
             TextField(
                 value = correo, onValueChange = { correo = it },
                 label = { Text("Correo electrónico") },
                 leadingIcon = { Icon(Icons.Filled.Email, null) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                isError = correo.isBlank() && cargando
             )
 
-            // ── Teléfono ───────────────────────────────────────────────
+            // ── Teléfono ─────────────────────────────────────────────────
             TextField(
                 value = telefono, onValueChange = { telefono = it },
                 label = { Text("Teléfono (opcional)") },
@@ -106,7 +120,7 @@ fun RegisterScreen(
                 shape = RoundedCornerShape(12.dp)
             )
 
-            // ── Contraseña ─────────────────────────────────────────────
+            // ── Contraseña ───────────────────────────────────────────────
             TextField(
                 value = contrasena, onValueChange = { contrasena = it },
                 label = { Text("Contraseña") },
@@ -115,24 +129,34 @@ fun RegisterScreen(
                     IconButton(onClick = { verPass = !verPass }) {
                         Icon(
                             if (verPass) Icons.Filled.VisibilityOff
-                            else Icons.Filled.Visibility, null)
+                            else Icons.Filled.Visibility, null
+                        )
                     }
                 },
                 visualTransformation = if (verPass) VisualTransformation.None
                 else PasswordVisualTransformation(),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                isError = contrasena.length < 6 && cargando,
+                supportingText = {
+                    if (contrasena.isNotEmpty() && contrasena.length < 6)
+                        Text("Mínimo 6 caracteres", color = MaterialTheme.colorScheme.error)
+                }
             )
 
-            // ── Selector de rol ────────────────────────────────────────
+            // ── Selector de rol ──────────────────────────────────────────
             Spacer(Modifier.height(4.dp))
-            Text("¿Cómo quieres usar UniRide?",
+            Text(
+                "¿Cómo quieres usar UniRide?",
                 style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold)
-            Text("Podrás cambiar tu rol en cualquier momento desde tu perfil.",
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "Podrás cambiar tu rol en cualquier momento desde tu perfil.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+            )
 
             Spacer(Modifier.height(2.dp))
 
@@ -140,7 +164,6 @@ fun RegisterScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Tarjeta Pasajero
                 RolCard(
                     seleccionado = rol == "pasajero",
                     icono        = Icons.Filled.Person,
@@ -149,7 +172,6 @@ fun RegisterScreen(
                     onClick      = { rol = "pasajero" },
                     modifier     = Modifier.weight(1f)
                 )
-                // Tarjeta Conductor
                 RolCard(
                     seleccionado = rol == "conductor",
                     icono        = Icons.Filled.DirectionsCar,
@@ -160,67 +182,46 @@ fun RegisterScreen(
                 )
             }
 
-            // ── Error ──────────────────────────────────────────────────
-            errorMsg?.let {
+            // ── Error del ViewModel ───────────────────────────────────────
+            errorMsg?.let { msg ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer)
                 ) {
-                    Row(modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Warning, null,
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.Warning, null,
                             tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(18.dp))
+                            modifier = Modifier.size(18.dp)
+                        )
                         Spacer(Modifier.width(8.dp))
-                        Text(it, style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text(
+                            msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
                     }
                 }
             }
 
             Spacer(Modifier.height(4.dp))
 
-            // ── Botón registrar ────────────────────────────────────────
+            // ── Botón registrar ───────────────────────────────────────────
             Button(
                 onClick = {
-                    when {
-                        nombre.isBlank()      -> { errorMsg = "Ingresa tu nombre"; return@Button }
-                        correo.isBlank()      -> { errorMsg = "Ingresa tu correo"; return@Button }
-                        !correo.contains("@") -> { errorMsg = "Correo inválido";   return@Button }
-                        contrasena.length < 6 -> {
-                            errorMsg = "La contraseña debe tener al menos 6 caracteres"
-                            return@Button
-                        }
-                    }
-                    errorMsg = null
-                    cargando = true
-
-                    scope.launch {
-                        try {
-                            RetrofitClient.apiService.crearUsuario(
-                                UsuarioDTO(
-                                    nombre     = nombre.trim(),
-                                    correo     = correo.trim(),
-                                    telefono   = telefono.ifBlank { null },
-                                    contrasena = contrasena,
-                                    rol        = rol
-                                )
-                            )
-                            cargando = false
-                            Toast.makeText(context, "¡Cuenta creada! Inicia sesión",
-                                android.widget.Toast.LENGTH_SHORT).show()
-                            navController.navigate(Routes.LOGIN) {
-                                popUpTo(Routes.REGISTER) { inclusive = true }
-                            }
-                        } catch (e: Exception) {
-                            cargando = false
-                            errorMsg = if (e.message?.contains("correo") == true)
-                                "Este correo ya está registrado"
-                            else "Error al registrar: ${e.message}"
-                        }
-                    }
+                    // Ya NO se llama a la API directamente desde la pantalla
+                    viewModel.register(
+                        nombre     = nombre,
+                        correo     = correo,
+                        contrasena = contrasena,
+                        telefono   = telefono.ifBlank { null },
+                        rol        = rol
+                    )
                 },
                 enabled  = !cargando,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -230,7 +231,8 @@ fun RegisterScreen(
                     CircularProgressIndicator(
                         modifier    = Modifier.size(22.dp),
                         strokeWidth = 2.dp,
-                        color       = androidx.compose.ui.graphics.Color.White)
+                        color       = androidx.compose.ui.graphics.Color.White
+                    )
                 } else {
                     Icon(Icons.Filled.PersonAdd, null)
                     Spacer(Modifier.width(8.dp))
@@ -238,17 +240,22 @@ fun RegisterScreen(
                 }
             }
 
-            // ── Link a login ───────────────────────────────────────────
+            // ── Link a login ──────────────────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
-                verticalAlignment     = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("¿Ya tienes cuenta? ",
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                Text(
+                    "¿Ya tienes cuenta? ",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
                 TextButton(onClick = { navController.popBackStack() }) {
-                    Text("Inicia sesión", fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        "Inicia sesión",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
 
@@ -270,7 +277,7 @@ private fun RolCard(
     Card(
         onClick = onClick,
         modifier = modifier,
-        shape  = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (seleccionado)
                 MaterialTheme.colorScheme.primaryContainer
@@ -279,8 +286,8 @@ private fun RolCard(
         border = if (seleccionado)
             androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
         else
-            androidx.compose.foundation.BorderStroke(1.dp,
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+            androidx.compose.foundation.BorderStroke(
+                1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
     ) {
         Column(
             modifier            = Modifier.padding(14.dp).fillMaxWidth(),
@@ -288,7 +295,7 @@ private fun RolCard(
         ) {
             Icon(
                 icono, null,
-                tint     = if (seleccionado) MaterialTheme.colorScheme.primary
+                tint = if (seleccionado) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                 modifier = Modifier.size(32.dp)
             )
@@ -296,7 +303,7 @@ private fun RolCard(
             Text(
                 titulo,
                 fontWeight = if (seleccionado) FontWeight.Bold else FontWeight.Normal,
-                color      = if (seleccionado) MaterialTheme.colorScheme.primary
+                color = if (seleccionado) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
             Spacer(Modifier.height(4.dp))

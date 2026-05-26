@@ -55,7 +55,6 @@ fun SplashScreen(
             if (!reintentando) delay(500)
             estado = ConexionEstado.OK
 
-            // ✅ Auto-login: si ya hay sesión guardada, ir directo a la pantalla del rol
             val sesion = authViewModel.sesionActual
             val destino = when {
                 sesion == null              -> Routes.LOGIN

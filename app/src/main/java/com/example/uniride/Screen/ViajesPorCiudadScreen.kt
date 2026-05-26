@@ -18,6 +18,7 @@ import com.example.uniride.ViewModel.ViajeViewModel
 import com.example.uniride.interfaces.RetrofitClient
 import com.example.uniride.model.Viaje
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,26 +27,39 @@ fun ViajesPorCiudadScreen(
     navController: NavController,
     authViewModel: AuthViewModel       = viewModel(),
     viajeViewModel: ViajeViewModel     = viewModel(),
-    reservaViewModel: ReservaViewModel = viewModel()
+    reservaViewModel: ReservaViewModel = viewModel(),
+    fechaFiltro: String?               = null
 ) {
-    val scope    = rememberCoroutineScope()
-    var viajes   by remember { mutableStateOf<List<Viaje>>(emptyList()) }
+    val scope = rememberCoroutineScope()
+    val ahora = LocalDateTime.now()
+    var todos    by remember { mutableStateOf<List<Viaje>>(emptyList()) }
     var cargando by remember { mutableStateOf(true) }
+    var fechaSel by remember(fechaFiltro) { mutableStateOf(fechaFiltro) }
 
-    LaunchedEffect(ciudad) {
-        scope.launch {
-            try {
-                val todos = RetrofitClient.apiService.viajesPorCiudad(ciudad)
-                viajes = todos.filter { it.estado == "disponible" }
-            } catch (e: Exception) { }
-            cargando = false
-        }
+    suspend fun cargar() {
+        cargando = true
+        try { todos = RetrofitClient.apiService.viajesPorCiudad(ciudad) }
+        catch (e: Exception) { }
+        cargando = false
     }
+
+    LaunchedEffect(ciudad) { scope.launch { cargar() } }
+
+    val base = todos.filter { v ->
+        if (v.estado != "disponible") return@filter false
+        val dt = try {
+            LocalDateTime.parse(v.fechaHora.substring(0, minOf(19, v.fechaHora.length)))
+        } catch (e: Exception) { null }
+        dt != null && !dt.isBefore(ahora)
+    }
+    val fechas = base.map { it.fechaHora.take(10) }.distinct().sorted()
+    val lista  = if (fechaSel == null) base
+    else base.filter { it.fechaHora.take(10) == fechaSel }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Viajes desde $ciudad") },
+                title = { Text("Viajes desde/hasta $ciudad") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Filled.ArrowBack, null)
@@ -56,36 +70,43 @@ fun ViajesPorCiudadScreen(
             )
         }
     ) { padding ->
-        if (cargando) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else if (viajes.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Filled.LocationCity, null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-                    Spacer(Modifier.height(8.dp))
-                    Text("No hay viajes desde $ciudad",
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                }
-            }
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                viajes.forEach { viaje ->
-                    ViajeCard(viaje = viaje) {
-                        navController.navigate("viaje_detalle/${viaje.idViaje}")
+        RefreshableContent(
+            isRefreshing = cargando,
+            onRefresh    = { scope.launch { cargar() } },
+            modifier     = Modifier.fillMaxSize().padding(padding)
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                HorizontalDatePicker(
+                    fechasDisponibles = fechas,
+                    fechaSeleccionada = fechaSel,
+                    onFechaSelected   = { fechaSel = it }
+                )
+                HorizontalDivider()
+
+                if (lista.isEmpty()) {
+                    Column(modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center) {
+                        Spacer(Modifier.height(180.dp))
+                        Text("Sin viajes disponibles",
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    }
+                } else {
+                    Column(modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        lista.forEach { v ->
+                            ViajeMiniCard(v) {
+                                navController.navigate("viaje_detalle/${v.idViaje}")
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
                     }
                 }
-                Spacer(Modifier.height(16.dp))
             }
         }
     }

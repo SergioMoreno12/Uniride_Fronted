@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,6 +24,7 @@ import androidx.navigation.NavController
 import com.example.uniride.ViewModel.AdminViewModel
 import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ui.theme.Routes
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,6 +38,8 @@ fun AdminScreen(
     val viajes    by adminViewModel.viajes.observeAsState(emptyList())
     val reservas  by adminViewModel.reservas.observeAsState(emptyList())
     val vehiculos by adminViewModel.vehiculos.observeAsState(emptyList())
+    val cargando  by adminViewModel.cargando.observeAsState(false)
+    val scope     = rememberCoroutineScope()
 
     LaunchedEffect(true) { adminViewModel.cargarTodo() }
 
@@ -55,15 +59,19 @@ fun AdminScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        RefreshableContent(
+            isRefreshing = cargando,
+            onRefresh    = { scope.launch { adminViewModel.cargarTodo() } },
+            modifier     = Modifier.fillMaxSize().padding(padding)
         ) {
-            // ── Bienvenida ──────────────────────────────────────────────
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // ── Bienvenida ──────────────────────────────────────────────
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape    = RoundedCornerShape(16.dp),
@@ -159,7 +167,6 @@ fun AdminScreen(
 
             Spacer(Modifier.height(4.dp))
 
-            // ✅ Único botón de cerrar sesión, sin duplicado en topBar
             OutlinedButton(
                 onClick  = {
                     authViewModel.cerrarSesion()
@@ -172,7 +179,7 @@ fun AdminScreen(
                 colors   = ButtonDefaults.outlinedButtonColors(
                     contentColor = MaterialTheme.colorScheme.error)
             ) {
-                Icon(Icons.Filled.Logout, null)
+                Icon(Icons.AutoMirrored.Filled.Logout, null)
                 Spacer(Modifier.width(8.dp))
                 Text("Cerrar sesión", fontWeight = FontWeight.Bold)
             }
@@ -180,6 +187,7 @@ fun AdminScreen(
             Spacer(Modifier.height(16.dp))
         }
     }
+}
 }
 
 @Composable

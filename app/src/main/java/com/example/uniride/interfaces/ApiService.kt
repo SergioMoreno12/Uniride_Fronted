@@ -2,10 +2,13 @@ package com.example.uniride.interfaces
 
 import com.example.uniride.model.*
 import com.example.uniride.model.dto.*
+import com.example.uniride.utils.SessionManager
+import okhttp3.OkHttpClient
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.*
+import java.util.concurrent.TimeUnit
 
 interface ApiService {
 
@@ -32,11 +35,11 @@ interface ApiService {
         @Body dto: ActualizarPerfilDTO
     ): Usuario
 
-    @PATCH("/api/usuarios/{id}/contrasena")
+    @PATCH("api/usuarios/{id}/contrasena")
     suspend fun cambiarContrasena(
         @Path("id") id: Long,
-        @Body body: Map<String, String>
-    ): String
+        @Body dto: CambiarContrasenaDTO
+    ): Response<Map<String, String>>
 
     @PATCH("/api/usuarios/{id}/activo")
     suspend fun toggleActivo(@Path("id") id: Long): Usuario
@@ -110,6 +113,9 @@ interface ApiService {
     @PATCH("/api/viajes/{id}/completar")
     suspend fun completarViaje(@Path("id") id: Long): Viaje
 
+    @PUT("api/viajes/{id}")
+    suspend fun actualizarViaje(@Path("id") id: Long, @Body dto: ViajeDTO): Viaje
+
     // ── Reservas ──────────────────────────────────────────────────────
     @GET("/api/reservas")
     suspend fun obtenerReservas(): List<Reserva>
@@ -139,7 +145,6 @@ interface ApiService {
     @GET("/api/reportes")
     suspend fun obtenerReportes(): List<Reporte>
 
-    // ✅ Nuevo — reportes por usuario
     @GET("/api/reportes/usuario/{idUsuario}")
     suspend fun reportesPorUsuario(@Path("idUsuario") id: Long): List<Reporte>
 
@@ -177,14 +182,44 @@ interface ApiService {
 
     @GET("/api/calificaciones/reserva/{idReserva}/calificada")
     suspend fun yaCalificada(@Path("idReserva") id: Long): Boolean
+
+    @GET("api/usuarios/conductores")
+    suspend fun listarConductores(): List<Usuario>
 }
 
 object RetrofitClient {
+
     private const val BASE_URL = "https://uniride-ja9a.onrender.com"
+
+    /**
+     * OkHttpClient con interceptor que inyecta el token JWT en cada request.
+     * Lee el token de SessionManager (en memoria), que se actualiza tras el login.
+     */
+    private val okHttpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            val original  = chain.request()
+            val token     = SessionManager.token
+
+            // Solo adjuntar el header si hay token activo
+            val request = if (token != null) {
+                original.newBuilder()
+                    .addHeader("Authorization", "Bearer $token")
+                    .build()
+            } else {
+                original
+            }
+
+            chain.proceed(request)
+        }
+        .build()
 
     val apiService: ApiService by lazy {
         Retrofit.Builder()
             .baseUrl(BASE_URL)
+            .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(ApiService::class.java)

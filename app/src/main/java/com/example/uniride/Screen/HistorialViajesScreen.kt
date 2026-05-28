@@ -35,14 +35,25 @@ fun HistorialViajesScreen(
     var historial by remember { mutableStateOf<List<Viaje>>(emptyList()) }
     var cargando  by remember { mutableStateOf(true) }
 
+    // FIX: Carga viajes de TODOS los vehículos del conductor
     suspend fun cargar() {
         cargando = true
         try {
             sesion?.idUsuario?.let { idUsuario ->
+                // Obtener todos los vehículos del conductor
                 val vehiculos = RetrofitClient.apiService.vehiculosPorUsuario(idUsuario)
-                vehiculos.firstOrNull()?.let { vehiculo ->
-                    val todos = RetrofitClient.apiService.viajesPorVehiculo(vehiculo.idVehiculo)
-                    historial = todos.filter { v ->
+                val todosLosViajes = mutableListOf<Viaje>()
+
+                // Acumular viajes de cada vehículo
+                for (vehiculo in vehiculos) {
+                    val viajesVehiculo = RetrofitClient.apiService.viajesPorVehiculo(vehiculo.idVehiculo)
+                    todosLosViajes.addAll(viajesVehiculo)
+                }
+
+                // Filtrar solo historial (viajes pasados, completados o cancelados)
+                historial = todosLosViajes
+                    .distinctBy { it.idViaje }  // Quitar duplicados
+                    .filter { v ->
                         val dt = try {
                             LocalDateTime.parse(
                                 v.fechaHora.substring(0, minOf(19, v.fechaHora.length)))
@@ -50,8 +61,8 @@ fun HistorialViajesScreen(
                         (dt != null && dt.isBefore(ahora)) ||
                                 v.estado == "completado" ||
                                 v.estado == "cancelado"
-                    }.sortedByDescending { it.fechaHora }
-                }
+                    }
+                    .sortedByDescending { it.fechaHora }
             }
         } catch (e: Exception) { }
         cargando = false
@@ -78,7 +89,7 @@ fun HistorialViajesScreen(
             onRefresh    = { scope.launch { cargar() } },
             modifier     = Modifier.fillMaxSize().padding(padding)
         ) {
-            if (historial.isEmpty()) {
+            if (historial.isEmpty() && !cargando) {
                 Column(modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState()),
@@ -88,8 +99,12 @@ fun HistorialViajesScreen(
                     Icon(Icons.Filled.History, null,
                         modifier = Modifier.size(64.dp),
                         tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-                    Text("Aún no tienes viajes completados",
+                    Spacer(Modifier.height(8.dp))
+                    Text("Aún no tienes viajes en el historial",
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    Text("Desliza hacia abajo para recargar",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
                 }
             } else {
                 Column(modifier = Modifier
@@ -102,10 +117,6 @@ fun HistorialViajesScreen(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
 
                     historial.forEach { viaje ->
-                        val estadoMostrado = when {
-                            viaje.estado == "cancelado" -> "cancelado"
-                            else -> "completado"
-                        }
                         Card(
                             onClick = { navController.navigate("viaje_activo/${viaje.idViaje}") },
                             modifier = Modifier.fillMaxWidth(),
@@ -121,12 +132,18 @@ fun HistorialViajesScreen(
                                         Text(viaje.fechaHora.take(16).replace("T", " "),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                        // Mostrar vehículo
+                                        viaje.vehiculo?.let { veh ->
+                                            Text("${veh.marca} ${veh.modelo} · ${veh.placa}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f))
+                                        }
                                     }
                                     Icon(
-                                        if (estadoMostrado == "cancelado") Icons.Filled.Cancel
+                                        if (viaje.estado == "cancelado") Icons.Filled.Cancel
                                         else Icons.Filled.CheckCircle,
                                         null,
-                                        tint = if (estadoMostrado == "cancelado")
+                                        tint = if (viaje.estado == "cancelado")
                                             MaterialTheme.colorScheme.error
                                         else MaterialTheme.colorScheme.secondary,
                                         modifier = Modifier.size(20.dp))

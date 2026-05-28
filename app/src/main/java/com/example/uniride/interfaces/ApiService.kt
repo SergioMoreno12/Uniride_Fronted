@@ -4,6 +4,7 @@ import com.example.uniride.model.*
 import com.example.uniride.model.dto.*
 import com.example.uniride.utils.SessionManager
 import okhttp3.OkHttpClient
+import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -35,7 +36,7 @@ interface ApiService {
         @Body dto: ActualizarPerfilDTO
     ): Usuario
 
-    @PATCH("api/usuarios/{id}/contrasena")
+    @PATCH("/api/usuarios/{id}/contrasena")
     suspend fun cambiarContrasena(
         @Path("id") id: Long,
         @Body dto: CambiarContrasenaDTO
@@ -52,6 +53,9 @@ interface ApiService {
 
     @DELETE("/api/usuarios/{id}")
     suspend fun eliminarUsuario(@Path("id") id: Long)
+
+    @GET("/api/usuarios/conductores")
+    suspend fun listarConductores(): List<Usuario>
 
     // ── Sedes ─────────────────────────────────────────────────────────
     @GET("/api/sedes")
@@ -113,9 +117,6 @@ interface ApiService {
     @PATCH("/api/viajes/{id}/completar")
     suspend fun completarViaje(@Path("id") id: Long): Viaje
 
-    @PUT("api/viajes/{id}")
-    suspend fun actualizarViaje(@Path("id") id: Long, @Body dto: ViajeDTO): Viaje
-
     // ── Reservas ──────────────────────────────────────────────────────
     @GET("/api/reservas")
     suspend fun obtenerReservas(): List<Reserva>
@@ -136,7 +137,7 @@ interface ApiService {
     suspend fun confirmarReserva(@Path("id") id: Long): Reserva
 
     @PATCH("/api/reservas/{id}/cancelar")
-    suspend fun cancelarReserva(@Path("id") id: Long): String
+    suspend fun cancelarReserva(@Path("id") id: Long): Response<Void>
 
     @PATCH("/api/reservas/{id}/calificada")
     suspend fun marcarReservaCalificada(@Path("id") id: Long)
@@ -147,6 +148,9 @@ interface ApiService {
 
     @GET("/api/reportes/usuario/{idUsuario}")
     suspend fun reportesPorUsuario(@Path("idUsuario") id: Long): List<Reporte>
+
+    @POST("/api/reportes")
+    suspend fun crearReporte(@Body body: Map<String, Any>): Reporte
 
     @PUT("/api/reportes/{id}")
     suspend fun actualizarReporte(
@@ -170,9 +174,8 @@ interface ApiService {
     @DELETE("/api/notificaciones/{id}")
     suspend fun eliminarNotificacion(@Path("id") id: Long)
 
-    // ── Calificaciones ────────────────────────────────────────────────
     @POST("/api/calificaciones")
-    suspend fun calificarConductor(@Body body: Map<String, Any>): Any
+    suspend fun calificarConductor(@Body body: Map<String, Any>): Response<ResponseBody>
 
     @GET("/api/calificaciones/conductor/{idConductor}")
     suspend fun calificacionesConductor(@Path("idConductor") id: Long): List<Calificacion>
@@ -182,36 +185,26 @@ interface ApiService {
 
     @GET("/api/calificaciones/reserva/{idReserva}/calificada")
     suspend fun yaCalificada(@Path("idReserva") id: Long): Boolean
-
-    @GET("api/usuarios/conductores")
-    suspend fun listarConductores(): List<Usuario>
 }
 
 object RetrofitClient {
 
     private const val BASE_URL = "https://uniride-ja9a.onrender.com"
 
-    /**
-     * OkHttpClient con interceptor que inyecta el token JWT en cada request.
-     * Lee el token de SessionManager (en memoria), que se actualiza tras el login.
-     */
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .addInterceptor { chain ->
-            val original  = chain.request()
-            val token     = SessionManager.token
-
-            // Solo adjuntar el header si hay token activo
-            val request = if (token != null) {
+            val original = chain.request()
+            val token    = SessionManager.token
+            val request  = if (token != null) {
                 original.newBuilder()
                     .addHeader("Authorization", "Bearer $token")
                     .build()
             } else {
                 original
             }
-
             chain.proceed(request)
         }
         .build()

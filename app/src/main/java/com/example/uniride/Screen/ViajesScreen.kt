@@ -2,7 +2,6 @@ package com.example.uniride.Screen
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -11,7 +10,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -27,21 +25,30 @@ fun ViajesScreen(
     authViewModel: AuthViewModel   = viewModel(),
     fechaFiltro: String?           = null
 ) {
-    val viajes   by viajeViewModel.viajes.observeAsState(emptyList())
-    val cargando by viajeViewModel.cargando.observeAsState(false)
-    val ahora    = LocalDateTime.now()
-    var fechaSel by remember(fechaFiltro) { mutableStateOf(fechaFiltro) }
+    val sesion           = authViewModel.sesionActual
+    val viajes           by viajeViewModel.viajes.observeAsState(emptyList())
+    val cargando         by viajeViewModel.cargando.observeAsState(false)
+    // FIX: Aplicar filtro de reservados y propios
+    val viajesReservados by viajeViewModel.viajesReservados.observeAsState(emptySet())
+    val viajesPropios    by viajeViewModel.viajesPropios.observeAsState(emptySet())
+    val ahora            = LocalDateTime.now()
+    var fechaSel         by remember(fechaFiltro) { mutableStateOf(fechaFiltro) }
 
-    LaunchedEffect(true) { viajeViewModel.cargarDisponibles() }
+    LaunchedEffect(true) { viajeViewModel.cargarDisponibles(sesion?.idUsuario) }
 
     val viajesBase = (viajes ?: emptyList()).filter { v ->
         if (v.estado != "disponible") return@filter false
+        // FIX: Mismos filtros que HomeScreen
+        if (v.idViaje in (viajesReservados ?: emptySet())) return@filter false
+        if (v.idViaje in (viajesPropios ?: emptySet())) return@filter false
+        val cupos = v.cuposDisponibles ?: (v.vehiculo?.capacidad ?: Int.MAX_VALUE)
+        if (cupos <= 0) return@filter false
         val dt = try {
             LocalDateTime.parse(v.fechaHora.substring(0, minOf(19, v.fechaHora.length)))
         } catch (e: Exception) { null }
         dt != null && !dt.isBefore(ahora)
     }
-    val fechas = viajesBase.map { it.fechaHora.take(10) }.distinct().sorted()
+    val fechas          = viajesBase.map { it.fechaHora.take(10) }.distinct().sorted()
     val viajesMostrados = if (fechaSel == null) viajesBase
     else viajesBase.filter { it.fechaHora.take(10) == fechaSel }
 
@@ -61,22 +68,31 @@ fun ViajesScreen(
     ) { padding ->
         RefreshableContent(
             isRefreshing = cargando,
-            onRefresh    = { viajeViewModel.cargarDisponibles() },
+            onRefresh    = { viajeViewModel.cargarDisponibles(sesion?.idUsuario) },
             modifier     = Modifier.fillMaxSize().padding(padding)
         ) {
             Column(Modifier.fillMaxSize()) {
                 HorizontalDatePicker(fechas, fechaSel) { fechaSel = it }
                 HorizontalDivider()
 
-                if (viajesMostrados.isEmpty()) {
+                if (viajesMostrados.isEmpty() && !cargando) {
                     Column(modifier = Modifier
                         .fillMaxSize()
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(androidx.compose.foundation.rememberScrollState()),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center) {
                         Spacer(Modifier.height(180.dp))
-                        Text("No hay viajes disponibles",
+                        Icon(Icons.Filled.SearchOff, null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            if (fechaSel != null) "No hay viajes para esa fecha"
+                            else "No hay viajes disponibles",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                        Text("Desliza hacia abajo para recargar",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
                     }
                 } else {
                     Column(modifier = Modifier

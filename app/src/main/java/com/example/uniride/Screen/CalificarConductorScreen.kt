@@ -28,9 +28,9 @@ fun CalificarConductorScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel()
 ) {
-    val sesion       = authViewModel.sesionActual
-    val scope        = rememberCoroutineScope()
-    val context      = LocalContext.current
+    val sesion   = authViewModel.sesionActual
+    val scope    = rememberCoroutineScope()
+    val context  = LocalContext.current
 
     var puntuacion   by remember { mutableIntStateOf(0) }
     var comentario   by remember { mutableStateOf("") }
@@ -47,14 +47,12 @@ fun CalificarConductorScreen(
         }
     }
 
-    // ✅ Función helper para volver al destino correcto según el rol
     fun volverInicio() {
         val destino = when (sesion?.rol) {
             "conductor"     -> Routes.MIS_VIAJES
             "administrador" -> Routes.ADMIN
             else            -> Routes.HOME
         }
-        // Volver al destino limpiando todo el back stack intermedio
         navController.navigate(destino) {
             popUpTo(destino) { inclusive = false }
             launchSingleTop = true
@@ -84,7 +82,7 @@ fun CalificarConductorScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if (yaCalificado) {
-                // Ya calificó
+
                 Spacer(Modifier.height(40.dp))
                 Icon(Icons.Filled.CheckCircle, null,
                     tint = MaterialTheme.colorScheme.primary,
@@ -102,7 +100,9 @@ fun CalificarConductorScreen(
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) { Text("Volver al inicio") }
+
             } else {
+
                 Icon(Icons.Filled.Star, null,
                     tint = MaterialTheme.colorScheme.tertiary,
                     modifier = Modifier.size(56.dp))
@@ -117,12 +117,47 @@ fun CalificarConductorScreen(
                         color = MaterialTheme.colorScheme.primary)
                 }
 
-                // Estrellas
+                // ── Selector numérico 1-5 ──────────────────────────
+                Text("Calificación",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    (1..5).forEach { i ->
+                        val selected = puntuacion == i
+                        Button(
+                            onClick = { puntuacion = i },
+                            modifier = Modifier.weight(1f).height(44.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = if (selected)
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiary)
+                            else
+                                ButtonDefaults.outlinedButtonColors(),
+                            contentPadding = PaddingValues(0.dp),
+                            border = if (!selected) ButtonDefaults.outlinedButtonBorder else null
+                        ) {
+                            Text(
+                                "$i",
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selected)
+                                    MaterialTheme.colorScheme.onTertiary
+                                else
+                                    MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+
+                // ── Estrellas ──────────────────────────────────────
                 Row(horizontalArrangement = Arrangement.Center) {
                     (1..5).forEach { i ->
                         IconButton(onClick = { puntuacion = i }) {
                             Icon(
-                                if (i <= puntuacion) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                if (i <= puntuacion) Icons.Filled.Star
+                                else Icons.Filled.StarBorder,
                                 null,
                                 tint = MaterialTheme.colorScheme.tertiary,
                                 modifier = Modifier.size(40.dp)
@@ -131,14 +166,15 @@ fun CalificarConductorScreen(
                     }
                 }
 
+                // ── Descripción textual de la puntuación ──────────
                 if (puntuacion > 0) {
                     Text(
                         when (puntuacion) {
-                            1 -> "😞 Muy malo"
-                            2 -> "😐 Malo"
-                            3 -> "🙂 Regular"
-                            4 -> "😊 Bueno"
-                            5 -> "🤩 Excelente"
+                            1    -> "😞 Muy malo"
+                            2    -> "😐 Malo"
+                            3    -> "🙂 Regular"
+                            4    -> "😊 Bueno"
+                            5    -> "🤩 Excelente"
                             else -> ""
                         },
                         style = MaterialTheme.typography.bodyLarge,
@@ -147,6 +183,7 @@ fun CalificarConductorScreen(
                     )
                 }
 
+                // ── Comentario ─────────────────────────────────────
                 TextField(
                     value = comentario,
                     onValueChange = { comentario = it },
@@ -157,6 +194,7 @@ fun CalificarConductorScreen(
                     shape = RoundedCornerShape(12.dp)
                 )
 
+                // ── Botón enviar ───────────────────────────────────
                 Button(
                     onClick = {
                         if (puntuacion == 0) {
@@ -167,7 +205,7 @@ fun CalificarConductorScreen(
                         cargando = true
                         scope.launch {
                             try {
-                                RetrofitClient.apiService.calificarConductor(
+                                val response = RetrofitClient.apiService.calificarConductor(
                                     mapOf(
                                         "puntuacion"  to puntuacion,
                                         "comentario"  to comentario,
@@ -176,15 +214,35 @@ fun CalificarConductorScreen(
                                         "idPasajero"  to (sesion?.idUsuario ?: 0L)
                                     )
                                 )
-                                // Marcar reserva como calificada
-                                RetrofitClient.apiService.marcarReservaCalificada(idReserva)
+                                // Descartar el body sin que Gson lo parsee
+                                response.body()?.close()
+
+                                if (!response.isSuccessful) {
+                                    val errorMsg = when (response.code()) {
+                                        409  -> "Ya calificaste este viaje anteriormente"
+                                        400  -> "Datos inválidos, verifica la calificación"
+                                        else -> "Error al calificar (${response.code()})"
+                                    }
+                                    cargando = false
+                                    Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
+                                    return@launch
+                                }
+
+                                // El backend ya marca la reserva como calificada,
+                                // pero lo llamamos también por seguridad
+                                try {
+                                    RetrofitClient.apiService.marcarReservaCalificada(idReserva)
+                                } catch (e: Exception) { /* ignorar */ }
+
                                 cargando = false
                                 Toast.makeText(context, "¡Gracias por tu calificación!",
                                     Toast.LENGTH_SHORT).show()
-                                volverInicio() //
+                                volverInicio()
+
                             } catch (e: Exception) {
                                 cargando = false
-                                Toast.makeText(context, e.message ?: "Error al calificar",
+                                Toast.makeText(context,
+                                    "Error de conexión. Intenta de nuevo.",
                                     Toast.LENGTH_SHORT).show()
                             }
                         }
@@ -193,9 +251,11 @@ fun CalificarConductorScreen(
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    if (cargando) CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                    else {
+                    if (cargando) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            strokeWidth = 2.dp)
+                    } else {
                         Icon(Icons.Filled.Send, null)
                         Spacer(Modifier.width(8.dp))
                         Text("Enviar calificación", fontWeight = FontWeight.Bold)

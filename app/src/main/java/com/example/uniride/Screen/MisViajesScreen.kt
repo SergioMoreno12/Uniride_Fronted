@@ -17,7 +17,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.example.uniride.interfaces.RetrofitClient
 import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ViewModel.ReservaViewModel
 import com.example.uniride.ViewModel.ViajeViewModel
@@ -45,24 +44,18 @@ fun MisViajesScreen(
 
     var viajeACancelar by remember { mutableStateOf<Viaje?>(null) }
 
-    suspend fun cargarViajes() {
-        sesion?.idUsuario?.let { idUsuario ->
-            try {
-                val vehiculos = RetrofitClient.apiService.vehiculosPorUsuario(idUsuario)
-                vehiculos.firstOrNull()?.let { vehiculo ->
-                    viajeViewModel.cargarMisViajes(vehiculo.idVehiculo)
-                }
-            } catch (e: Exception) { }
-        }
+    // FIX: Ahora cargarMisViajes() internamente carga de todos los vehículos
+    fun cargar() {
+        sesion?.idUsuario?.let { viajeViewModel.cargarMisViajes(it) }
     }
 
-    LaunchedEffect(true) { cargarViajes() }
+    LaunchedEffect(true) { cargar() }
 
     LaunchedEffect(mensaje) {
         mensaje?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
             viajeViewModel.limpiarMensaje()
-            if (it.contains("cancelado") || it.contains("actualizado")) cargarViajes()
+            if (it.contains("cancelado") || it.contains("actualizado")) cargar()
         }
     }
 
@@ -82,7 +75,7 @@ fun MisViajesScreen(
     ) { padding ->
         RefreshableContent(
             isRefreshing = cargando,
-            onRefresh    = { scope.launch { cargarViajes() } },
+            onRefresh    = { cargar() },
             modifier     = Modifier.fillMaxSize().padding(padding)
         ) {
             val activos = (misViajes ?: emptyList()).filter { v ->
@@ -172,8 +165,14 @@ fun MisViajesScreen(
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.8f))
                                         }
+                                        // Mostrar el vehículo si tiene más de uno
+                                        if (viaje.vehiculo != null) {
+                                            Text("🚗 ${viaje.vehiculo.marca} ${viaje.vehiculo.modelo} · ${viaje.vehiculo.placa}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                                        }
                                         Text("$ ${"%.0f".format(viaje.costo)} · " +
-                                                "${viaje.vehiculo?.capacidad} puestos",
+                                                "${viaje.vehiculo?.capacidad ?: "-"} puestos",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.primary)
                                     }
@@ -235,7 +234,7 @@ fun MisViajesScreen(
             onDismissRequest = { viajeACancelar = null },
             shape = RoundedCornerShape(20.dp),
             title = { Text("Cancelar viaje") },
-            text  = { Text("¿Cancelar el viaje de ${v.origen} a ${v.destino}?") },
+            text  = { Text("¿Cancelar el viaje de ${v.origen} a ${v.destino}?\n\nLos pasajeros con reserva serán notificados.") },
             confirmButton = {
                 Button(
                     onClick = {

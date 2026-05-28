@@ -303,6 +303,23 @@ fun PerfilScreen(
                     }
                 }
 
+                // NUEVO: Botón para reportar un problema (solo pasajero y conductor)
+                if (rolActual != "administrador") {
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick  = { navController.navigate(Routes.CREAR_REPORTE) },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape    = RoundedCornerShape(12.dp),
+                        colors   = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.tertiary
+                        )
+                    ) {
+                        Icon(Icons.Filled.Report, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Reportar un problema", fontWeight = FontWeight.Bold)
+                    }
+                }
+
                 Spacer(Modifier.height(10.dp))
                 OutlinedButton(
                     onClick = {

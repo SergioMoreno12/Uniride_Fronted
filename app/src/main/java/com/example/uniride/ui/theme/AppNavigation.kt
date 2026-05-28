@@ -18,7 +18,6 @@ object Routes {
     const val MAIN                  = "main?page={page}"
     fun main(page: Int = 0)         = "main?page=$page"
 
-    // Aliases de rol — usados por BottomNavBar y navegación externa
     const val HOME                  = "home"
     const val MIS_RESERVAS          = "mis_reservas"
     const val PUBLICAR              = "publicar"
@@ -26,7 +25,6 @@ object Routes {
     const val NOTIFICACIONES        = "notificaciones"
     const val PERFIL                = "perfil"
 
-    // Pantallas secundarias
     const val VIAJES                = "viajes?fecha={fecha}"
     const val VIAJE_DETALLE         = "viaje_detalle/{idViaje}"
     const val HISTORIAL_RESERVAS    = "historial_reservas"
@@ -53,6 +51,8 @@ object Routes {
     const val ADMIN_NOTIFICACIONES  = "admin_notificaciones"
     const val RESERVA_DETALLE       = "reserva_detalle/{idReserva}"
     const val LISTA_CONDUCTORES     = "lista_conductores"
+    const val CREAR_REPORTE         = "crear_reporte"
+    const val PASAJERO_PERFIL = "pasajero_perfil/{idPasajero}"
 }
 
 @Composable
@@ -61,6 +61,7 @@ fun AppNavigation() {
     val authViewModel:    AuthViewModel    = viewModel()
     val viajeViewModel:   ViajeViewModel   = viewModel()
     val reservaViewModel: ReservaViewModel = viewModel()
+    // FIX: adminViewModel compartido en toda la navegación
     val adminViewModel:   AdminViewModel   = viewModel()
     val perfilViewModel:  PerfilViewModel  = viewModel()
     val notifViewModel:   NotifViewModel   = viewModel()
@@ -91,42 +92,35 @@ fun AppNavigation() {
                 authViewModel    = authViewModel,
                 viajeViewModel   = viajeViewModel,
                 reservaViewModel = reservaViewModel,
+                // FIX: pasar adminViewModel compartido
+                adminViewModel   = adminViewModel,
                 perfilViewModel  = perfilViewModel,
                 notifViewModel   = notifViewModel
             )
         }
 
-        // ────────────────────────────────────────────────────────────
-        //
-        // Estructura de páginas:
-        //   Pasajero:  [home(0), mis_reservas(1), notificaciones(2), perfil(3)]
-        //   Conductor: [mis_viajes(0), publicar(1), notificaciones(2), perfil(3)]
-        //
-        // → Notificaciones y Perfil siempre están en índice 2 y 3.
-        // ────────────────────────────────────────────────────────────
-
         // Pasajero
         composable("home") {
-            MainPagerScreen(navController, 0, authViewModel, viajeViewModel, reservaViewModel, perfilViewModel, notifViewModel)
+            MainPagerScreen(navController, 0, authViewModel, viajeViewModel, reservaViewModel, adminViewModel, perfilViewModel, notifViewModel)
         }
         composable("mis_reservas") {
-            MainPagerScreen(navController, 1, authViewModel, viajeViewModel, reservaViewModel, perfilViewModel, notifViewModel)
+            MainPagerScreen(navController, 1, authViewModel, viajeViewModel, reservaViewModel, adminViewModel, perfilViewModel, notifViewModel)
         }
 
         // Conductor
         composable("mis_viajes") {
-            MainPagerScreen(navController, 0, authViewModel, viajeViewModel, reservaViewModel, perfilViewModel, notifViewModel)
+            MainPagerScreen(navController, 0, authViewModel, viajeViewModel, reservaViewModel, adminViewModel, perfilViewModel, notifViewModel)
         }
         composable("publicar") {
-            MainPagerScreen(navController, 1, authViewModel, viajeViewModel, reservaViewModel, perfilViewModel, notifViewModel)
+            MainPagerScreen(navController, 1, authViewModel, viajeViewModel, reservaViewModel, adminViewModel, perfilViewModel, notifViewModel)
         }
 
-        // Compartidos (índice 2 y 3 en ambos roles)
+        // Compartidos
         composable("notificaciones") {
-            MainPagerScreen(navController, 2, authViewModel, viajeViewModel, reservaViewModel, perfilViewModel, notifViewModel)
+            MainPagerScreen(navController, 2, authViewModel, viajeViewModel, reservaViewModel, adminViewModel, perfilViewModel, notifViewModel)
         }
         composable("perfil") {
-            MainPagerScreen(navController, 3, authViewModel, viajeViewModel, reservaViewModel, perfilViewModel, notifViewModel)
+            MainPagerScreen(navController, 3, authViewModel, viajeViewModel, reservaViewModel, adminViewModel, perfilViewModel, notifViewModel)
         }
 
         // ── Pantallas secundarias ────────────────────────────────────
@@ -249,6 +243,15 @@ fun AppNavigation() {
 
         composable("lista_conductores") {
             ListaConductoresScreen(navController, authViewModel, viajeViewModel)
+        }
+
+        composable("crear_reporte") {
+            CrearReporteScreen(navController, authViewModel)
+        }
+
+        composable("pasajero_perfil/{idPasajero}") { back ->
+            val id = back.arguments?.getString("idPasajero")?.toLongOrNull() ?: 0L
+            PasajeroPerfilScreen(id, navController, authViewModel)
         }
     }
 }

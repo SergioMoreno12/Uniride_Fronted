@@ -21,6 +21,8 @@ import androidx.navigation.NavController
 import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ViewModel.ReservaViewModel
 import com.example.uniride.ViewModel.ViajeViewModel
+import com.example.uniride.interfaces.RetrofitClient
+import com.example.uniride.model.Viaje
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -33,24 +35,46 @@ fun ViajeDetalleScreen(
     viajeViewModel: ViajeViewModel     = viewModel()
 ) {
     val sesion           = authViewModel.sesionActual
-    val viajes           by viajeViewModel.viajes.observeAsState(emptyList())
     val viajesReservados by viajeViewModel.viajesReservados.observeAsState(emptySet())
     val viajesPropios    by viajeViewModel.viajesPropios.observeAsState(emptySet())
-    val viaje            = (viajes ?: emptyList()).find { it.idViaje == idViaje }
-    val cargando         by reservaViewModel.cargando.observeAsState(false)
+    val cargandoReserva  by reservaViewModel.cargando.observeAsState(false)
     val mensaje          by reservaViewModel.mensaje.observeAsState(null)
     var showDialog       by remember { mutableStateOf(false) }
     val context          = LocalContext.current
+    val scope            = rememberCoroutineScope()
+
+    // Carga el viaje directamente del API y también las reservas para calcular cupos reales
+    var viaje         by remember { mutableStateOf<Viaje?>(null) }
+    var reservasCount by remember { mutableStateOf(0) }
+    var cargandoViaje by remember { mutableStateOf(true) }
+
+    suspend fun recargarViaje() {
+        try {
+            viaje = RetrofitClient.apiService.obtenerViaje(idViaje)
+            // Cargar reservas para calcular cupos reales cuando el backend
+            // no devuelve cuposDisponibles en los endpoints de lista
+            val reservas = RetrofitClient.apiService.reservasPorViaje(idViaje)
+            reservasCount = reservas.size
+        } catch (e: Exception) { }
+    }
+
+    LaunchedEffect(idViaje) {
+        scope.launch {
+            recargarViaje()
+            cargandoViaje = false
+        }
+    }
 
     val yaReservo = idViaje in (viajesReservados ?: emptySet())
-    val esPropio  = idViaje in (viajesPropios ?: emptySet())
+    val esPropio  = idViaje in (viajesPropios ?: emptySet()) ||
+            (viaje?.vehiculo?.usuario?.idUsuario == sesion?.idUsuario)
 
     LaunchedEffect(mensaje) {
         mensaje?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
             reservaViewModel.limpiarMensaje()
             if (it.contains("éxito")) {
-                // ✅ Recargar viajes con idUsuario para actualizar cupos y viajesReservados
+                scope.launch { recargarViaje() }
                 viajeViewModel.cargarDisponibles(sesion?.idUsuario)
                 navController.popBackStack()
             }
@@ -72,22 +96,47 @@ fun ViajeDetalleScreen(
         }
     ) { padding ->
         RefreshableContent(
-            isRefreshing = cargando,
-            onRefresh    = { viajeViewModel.cargarDisponibles(sesion?.idUsuario) },
-            modifier     = Modifier.fillMaxSize().padding(padding)
+            isRefreshing = cargandoViaje || cargandoReserva,
+            onRefresh    = {
+                scope.launch {
+                    cargandoViaje = true
+                    recargarViaje()
+                    cargandoViaje = false
+                }
+            },
+            modifier = Modifier.fillMaxSize().padding(padding)
         ) {
-            if (viaje == null) {
-                Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            if (cargandoViaje) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
+            } else if (viaje == null) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Filled.ErrorOutline, null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.height(8.dp))
+                        Text("No se pudo cargar el viaje",
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(onClick = { navController.popBackStack() }) {
+                            Text("Volver")
+                        }
+                    }
+                }
             } else {
-                val capacidad = viaje.vehiculo?.capacidad ?: 0
-                val cupos     = viaje.cuposDisponibles ?: capacidad
+                val v         = viaje!!
+                val capacidad = v.vehiculo?.capacidad ?: 0
+
+                // Cupos: prioridad 1) campo del backend, 2) calculado de reservas, 3) capacidad total
+                val cupos = v.cuposDisponibles
+                    ?: if (capacidad > 0) (capacidad - reservasCount).coerceAtLeast(0)
+                    else capacidad
 
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(padding)
                         .verticalScroll(rememberScrollState())
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -102,64 +151,62 @@ fun ViajeDetalleScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary)
 
-                            DetalleRowViaje(Icons.Filled.LocationOn, "Origen", viaje.origen)
+                            DetalleRowViaje(Icons.Filled.LocationOn,   "Origen",     v.origen)
                             DetalleRowViaje(Icons.Filled.School,
-                                "Sede destino", viaje.sede?.nombreSede ?: viaje.destino)
+                                "Sede destino", v.sede?.nombreSede ?: v.destino)
                             DetalleRowViaje(Icons.Filled.LocationCity,
-                                "Ciudad destino", viaje.sede?.ciudad ?: "-")
-
-                            DetalleRowViaje(Icons.Filled.CalendarToday,
-                                "Fecha",
-                                viaje.fechaHora.take(10))
-
+                                "Ciudad", v.sede?.ciudad ?: "-")
+                            DetalleRowViaje(Icons.Filled.CalendarToday, "Fecha",     v.fechaHora.take(10))
                             DetalleRowViaje(Icons.Filled.AccessTime,
                                 "Hora de salida",
-                                if (viaje.fechaHora.length >= 16)
-                                    viaje.fechaHora.substring(11, 16)
-                                else "--:--")
-
-                            if (!viaje.horaLlegada.isNullOrBlank()) {
+                                if (v.fechaHora.length >= 16) v.fechaHora.substring(11, 16) else "--:--")
+                            if (!v.horaLlegada.isNullOrBlank()) {
                                 DetalleRowViaje(Icons.Filled.Schedule,
                                     "Hora de llegada",
-                                    if (viaje.horaLlegada.length >= 16)
-                                        viaje.horaLlegada.substring(11, 16)
-                                    else "--:--")
+                                    if (v.horaLlegada.length >= 16) v.horaLlegada.substring(11, 16) else "--:--")
                             }
-
                             DetalleRowViaje(Icons.Filled.AttachMoney,
-                                "Costo por puesto",
-                                "$ ${"%.0f".format(viaje.costo)}")
-
-                            if (!viaje.descripcionPunto.isNullOrBlank()) {
+                                "Costo por puesto", "$ ${"%.0f".format(v.costo)}")
+                            if (!v.descripcionPunto.isNullOrBlank()) {
                                 DetalleRowViaje(Icons.Filled.Place,
-                                    "Punto de encuentro",
-                                    viaje.descripcionPunto)
+                                    "Punto de encuentro", v.descripcionPunto)
                             }
 
-                            // ── Cupos disponibles ───────────────────────
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.EventSeat, null,
-                                    tint = if (cupos > 0) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(10.dp))
-                                Column {
-                                    Text("Cupos disponibles",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                                    Text(
-                                        if (cupos > 0) "$cupos de $capacidad cupos libres"
-                                        else "Sin cupos disponibles",
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (cupos > 0) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.error
-                                    )
+                            // ── Barra de disponibilidad ─────────────────
+                            if (capacidad > 0) {
+                                HorizontalDivider()
+                                Text("Disponibilidad",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                // Siempre se muestra porque cargamos las reservas
+                                CuposProgressBar(
+                                    cuposDisponibles = cupos,
+                                    capacidadTotal   = capacidad,
+                                    modifier         = Modifier.fillMaxWidth()
+                                )
+                                // Iconos de asientos individuales
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    repeat(capacidad) { i ->
+                                        val ocupado = i >= cupos
+                                        Icon(
+                                            if (ocupado) Icons.Filled.EventSeat
+                                            else Icons.Filled.AirlineSeatReclineNormal,
+                                            contentDescription = null,
+                                            tint = if (ocupado)
+                                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.22f)
+                                            else MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    // ── Info del vehículo y conductor ─────────────────
+                    // ── Vehículo y conductor ───────────────────────────
                     Card(modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp)) {
                         Column(modifier = Modifier.padding(16.dp),
@@ -171,27 +218,23 @@ fun ViajeDetalleScreen(
 
                             DetalleRowViaje(Icons.Filled.DirectionsCar,
                                 "Vehículo",
-                                "${viaje.vehiculo?.marca} ${viaje.vehiculo?.modelo}")
+                                "${v.vehiculo?.marca ?: "-"} ${v.vehiculo?.modelo ?: ""}")
                             DetalleRowViaje(Icons.Filled.ConfirmationNumber,
-                                "Placa",
-                                viaje.vehiculo?.placa ?: "-")
+                                "Placa", v.vehiculo?.placa ?: "-")
                             DetalleRowViaje(Icons.Filled.EventSeat,
-                                "Capacidad total",
-                                "$capacidad puestos")
+                                "Capacidad total", "$capacidad puestos")
                             DetalleRowViaje(Icons.Filled.Person,
-                                "Conductor",
-                                viaje.vehiculo?.usuario?.nombre ?: "-")
+                                "Conductor", v.vehiculo?.usuario?.nombre ?: "-")
 
-                            viaje.vehiculo?.usuario?.let { conductor ->
+                            v.vehiculo?.usuario?.let { conductor ->
                                 OutlinedButton(
                                     onClick = {
                                         navController.navigate("conductor_perfil/${conductor.idUsuario}")
                                     },
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape    = RoundedCornerShape(10.dp)
                                 ) {
-                                    Icon(Icons.Filled.Person, null,
-                                        modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Filled.Person, null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
                                     Text("Ver perfil del conductor")
                                 }
@@ -199,7 +242,7 @@ fun ViajeDetalleScreen(
                         }
                     }
 
-                    // ── Estado del viaje ──────────────────────────────
+                    // ── Acción ─────────────────────────────────────────
                     when {
                         esPropio -> {
                             Card(modifier = Modifier.fillMaxWidth(),
@@ -211,8 +254,13 @@ fun ViajeDetalleScreen(
                                     Icon(Icons.Filled.Info, null,
                                         tint = MaterialTheme.colorScheme.primary)
                                     Spacer(Modifier.width(8.dp))
-                                    Text("Este es tu viaje publicado",
-                                        style = MaterialTheme.typography.bodySmall)
+                                    Column {
+                                        Text("Este es tu viaje publicado",
+                                            fontWeight = FontWeight.SemiBold)
+                                        Text("Toca 'Mis viajes' para gestionar tus viajes.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                    }
                                 }
                             }
                         }
@@ -238,34 +286,29 @@ fun ViajeDetalleScreen(
                             }
                         }
 
+                        sesion?.rol == "administrador" -> { /* Admin solo visualiza */ }
+
                         else -> {
-                            if (sesion?.rol != "administrador") {
-                                Button(
-                                    onClick = { showDialog = true },
-                                    enabled = !cargando &&
-                                            viaje.estado == "disponible" &&
-                                            cupos > 0,
-                                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    if (cargando) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(22.dp),
-                                            strokeWidth = 2.dp)
-                                    } else {
-                                        Icon(Icons.Filled.BookOnline, null)
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            when {
-                                                viaje.estado != "disponible" ->
-                                                    "Viaje ${viaje.estado}"
-                                                cupos <= 0 -> "Sin cupos disponibles"
-                                                else ->
-                                                    "Reservar · $cupos cupo${if (cupos > 1) "s" else ""}"
-                                            },
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
+                            Button(
+                                onClick  = { showDialog = true },
+                                enabled  = !cargandoReserva && v.estado == "disponible" && cupos > 0,
+                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                shape    = RoundedCornerShape(12.dp)
+                            ) {
+                                if (cargandoReserva) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Filled.BookOnline, null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        when {
+                                            v.estado != "disponible" -> "Viaje ${v.estado}"
+                                            cupos <= 0 -> "Sin cupos disponibles"
+                                            else -> "Reservar · $cupos cupo${if (cupos > 1) "s" else ""} libre${if (cupos > 1) "s" else ""}"
+                                        },
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
                             }
                         }
@@ -280,39 +323,47 @@ fun ViajeDetalleScreen(
                         onDismissRequest = { showDialog = false },
                         shape = RoundedCornerShape(20.dp),
                         title = { Text("Confirmar reserva") },
-                        text = {
+                        text  = {
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text("¿Deseas reservar un puesto en este viaje?")
                                 Spacer(Modifier.height(4.dp))
-                                Text("Origen: ${viaje.origen}",
+                                Text("Origen: ${v.origen}",
                                     style = MaterialTheme.typography.bodySmall)
-                                Text("Destino: ${viaje.sede?.nombreSede}",
+                                Text("Destino: ${v.sede?.nombreSede ?: v.destino}",
                                     style = MaterialTheme.typography.bodySmall)
-                                Text("Fecha: ${viaje.fechaHora.take(10)}",
+                                Text("Fecha: ${v.fechaHora.take(10)}",
                                     style = MaterialTheme.typography.bodySmall)
-                                Text("Salida: ${if (viaje.fechaHora.length >= 16)
-                                    viaje.fechaHora.substring(11, 16) else "--:--"}",
+                                Text("Salida: ${if (v.fechaHora.length >= 16)
+                                    v.fechaHora.substring(11, 16) else "--:--"}",
                                     style = MaterialTheme.typography.bodySmall)
-                                if (!viaje.horaLlegada.isNullOrBlank()) {
-                                    Text("Llegada: ${if (viaje.horaLlegada.length >= 16)
-                                        viaje.horaLlegada.substring(11, 16) else "--:--"}",
+                                if (!v.horaLlegada.isNullOrBlank()) {
+                                    Text("Llegada: ${if (v.horaLlegada.length >= 16)
+                                        v.horaLlegada.substring(11, 16) else "--:--"}",
                                         style = MaterialTheme.typography.bodySmall)
                                 }
-                                Text("Costo: $ ${"%.0f".format(viaje.costo)}",
+                                Text("Costo: $ ${"%.0f".format(v.costo)}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Bold)
-                                if (!viaje.descripcionPunto.isNullOrBlank()) {
-                                    Text("Punto de encuentro: ${viaje.descripcionPunto}",
+                                if (!v.descripcionPunto.isNullOrBlank()) {
+                                    Text("Punto de encuentro: ${v.descripcionPunto}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.tertiary)
                                 }
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Quedan $cupos cupo${if (cupos > 1) "s" else ""} disponible${if (cupos > 1) "s" else ""}",
+                                    style      = MaterialTheme.typography.bodySmall,
+                                    color      = if (cupos == 1) MaterialTheme.colorScheme.error
+                                    else MaterialTheme.colorScheme.secondary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
                         },
                         confirmButton = {
                             Button(onClick = {
                                 sesion?.idUsuario?.let {
-                                    reservaViewModel.reservar(it, viaje.idViaje)
+                                    reservaViewModel.reservar(it, v.idViaje)
                                 }
                                 showDialog = false
                             }) { Text("Confirmar") }

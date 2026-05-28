@@ -38,12 +38,14 @@ fun ViajeActivoDetalleScreen(
     val scope   = rememberCoroutineScope()
     val context = LocalContext.current
 
-    var viaje          by remember { mutableStateOf<Viaje?>(null) }
-    var reservas       by remember { mutableStateOf<List<Reserva>>(emptyList()) }
-    var calificaciones by remember { mutableStateOf<List<Calificacion>>(emptyList()) }
-    var cargando       by remember { mutableStateOf(true) }
+    var viaje           by remember { mutableStateOf<Viaje?>(null) }
+    var reservas        by remember { mutableStateOf<List<Reserva>>(emptyList()) }
+    var calificaciones  by remember { mutableStateOf<List<Calificacion>>(emptyList()) }
+    var cargando        by remember { mutableStateOf(true) }
     var viajeACompletar by remember { mutableStateOf(false) }
     var viajeACancelar  by remember { mutableStateOf(false) }
+    // NUEVO: Reserva que el conductor quiere cancelar
+    var reservaACancelar by remember { mutableStateOf<Reserva?>(null) }
 
     val mensaje by reservaViewModel.mensaje.observeAsState(null)
 
@@ -72,6 +74,64 @@ fun ViajeActivoDetalleScreen(
             reservaViewModel.limpiarMensaje()
             scope.launch { recargar() }
         }
+    }
+
+    // ── Diálogo: cancelar reserva del pasajero ────────────────────────────
+    reservaACancelar?.let { r ->
+        AlertDialog(
+            onDismissRequest = { reservaACancelar = null },
+            shape = RoundedCornerShape(20.dp),
+            icon = {
+                Icon(Icons.Filled.PersonRemove, null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(28.dp))
+            },
+            title = { Text("Cancelar reserva", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("¿Cancelar la reserva de ${r.usuario?.nombre ?: "este pasajero"}?")
+                    Text(
+                        "El cupo quedará libre y el pasajero podrá volver a reservar otro viaje.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val reservaId   = r.idReserva
+                        val nombrePasajero = r.usuario?.nombre ?: "el pasajero"
+                        reservaACancelar = null
+                        scope.launch {
+                            try {
+                                val response = RetrofitClient.apiService.cancelarReserva(reservaId)
+                                if (response.isSuccessful) {
+                                    Toast.makeText(context,
+                                        "Reserva de $nombrePasajero cancelada",
+                                        Toast.LENGTH_SHORT).show()
+                                    recargar()
+                                } else {
+                                    // Código no 2xx (ej. 400 si ya estaba cancelada)
+                                    Toast.makeText(context,
+                                        "No se pudo cancelar (${response.code()})",
+                                        Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(context,
+                                    "Error de conexión: ${e.message}",
+                                    Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Sí, cancelar reserva") }
+            },
+            dismissButton = {
+                TextButton(onClick = { reservaACancelar = null }) { Text("Volver") }
+            }
+        )
     }
 
     Scaffold(
@@ -105,150 +165,221 @@ fun ViajeActivoDetalleScreen(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                viaje?.let { v ->
-                    Card(modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp)) {
-                        Column(modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Información del viaje", fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary)
-                            InfoRowDetalle(Icons.Filled.LocationOn,  "Origen",   v.origen)
-                            InfoRowDetalle(Icons.Filled.School,      "Destino",  v.sede?.nombreSede ?: v.destino)
-                            InfoRowDetalle(Icons.Filled.AccessTime,  "Salida",   v.fechaHora.take(16).replace("T", " "))
-                            v.horaLlegada?.let {
-                                InfoRowDetalle(Icons.Filled.Schedule, "Llegada",
-                                    it.take(16).replace("T", " "))
+                    viaje?.let { v ->
+                        val capacidad = v.vehiculo?.capacidad ?: 0
+                        val cupos     = v.cuposDisponibles ?: (capacidad - reservas.size)
+                            .coerceAtLeast(0)
+
+                        Card(modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp)) {
+                            Column(modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Información del viaje", fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary)
+                                InfoRowDetalle(Icons.Filled.LocationOn,  "Origen",   v.origen)
+                                InfoRowDetalle(Icons.Filled.School,      "Destino",  v.sede?.nombreSede ?: v.destino)
+                                InfoRowDetalle(Icons.Filled.AccessTime,  "Salida",   v.fechaHora.take(16).replace("T", " "))
+                                v.horaLlegada?.let {
+                                    InfoRowDetalle(Icons.Filled.Schedule, "Llegada",
+                                        it.take(16).replace("T", " "))
+                                }
+                                InfoRowDetalle(Icons.Filled.AttachMoney, "Costo",
+                                    "$ ${"%.0f".format(v.costo)}")
+                                v.descripcionPunto?.let {
+                                    InfoRowDetalle(Icons.Filled.Place, "Punto de encuentro", it)
+                                }
+                                InfoRowDetalle(Icons.Filled.Badge, "Estado", v.estado.uppercase())
+
+                                // ── Barra de cupos ──
+                                if (capacidad > 0) {
+                                    HorizontalDivider()
+                                    CuposProgressBar(
+                                        cuposDisponibles = cupos,
+                                        capacidadTotal   = capacidad,
+                                        modifier         = Modifier.fillMaxWidth()
+                                    )
+                                }
                             }
-                            InfoRowDetalle(Icons.Filled.AttachMoney, "Costo",
-                                "$ ${"%.0f".format(v.costo)}")
-                            v.descripcionPunto?.let {
-                                InfoRowDetalle(Icons.Filled.Place, "Punto de encuentro", it)
+                        }
+
+                        // ── Acciones del conductor sobre su viaje ──
+                        if (v.estado == "disponible" || v.estado == "lleno") {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = { viajeACompletar = true },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.secondary)
+                                ) {
+                                    Icon(Icons.Filled.CheckCircle, null,
+                                        modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Completar viaje",
+                                        style = MaterialTheme.typography.labelMedium)
+                                }
+                                OutlinedButton(
+                                    onClick = { viajeACancelar = true },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.error)
+                                ) {
+                                    Icon(Icons.Filled.Cancel, null,
+                                        modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Cancelar viaje",
+                                        style = MaterialTheme.typography.labelMedium)
+                                }
                             }
-                            InfoRowDetalle(Icons.Filled.Badge, "Estado", v.estado.uppercase())
                         }
                     }
 
-                    // ── Acciones del conductor sobre su viaje ─────────
-                    if (v.estado == "disponible" || v.estado == "lleno") {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = { viajeACompletar = true },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.secondary)
-                            ) {
-                                Icon(Icons.Filled.CheckCircle, null,
-                                    modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Completar viaje",
-                                    style = MaterialTheme.typography.labelMedium)
-                            }
-                            OutlinedButton(
-                                onClick = { viajeACancelar = true },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.error)
-                            ) {
-                                Icon(Icons.Filled.Cancel, null,
-                                    modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Cancelar viaje",
-                                    style = MaterialTheme.typography.labelMedium)
-                            }
+                    // ── Lista de pasajeros ──────────────────────────────
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Pasajeros (${reservas.size})",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (reservas.isNotEmpty()) {
+                            val confirmadas = reservas.count { it.confirmada }
+                            Text(
+                                "$confirmadas/${reservas.size} confirmados",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
                         }
                     }
-                }
 
-                Text("Pasajeros (${reservas.size})", fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface)
-
-                if (reservas.isEmpty()) {
-                    Card(modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)) {
-                        Box(modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                            contentAlignment = Alignment.Center) {
-                            Text("Sin reservas en este viaje",
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                        }
-                    }
-                } else {
-                    reservas.forEach { reserva ->
+                    if (reservas.isEmpty()) {
                         Card(modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp)) {
-                            Column(modifier = Modifier.padding(14.dp)) {
-                                Row(modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically) {
-                                    Column {
-                                        Text(reserva.usuario?.nombre ?: "-",
-                                            fontWeight = FontWeight.SemiBold)
-                                        Text(reserva.usuario?.telefono ?: "Sin teléfono",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                                    }
-                                    AssistChip(onClick = {}, label = {
-                                        Text(if (reserva.confirmada) "Confirmado" else "Pendiente",
-                                            style = MaterialTheme.typography.labelSmall)
-                                    })
-                                }
+                            Box(modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                contentAlignment = Alignment.Center) {
+                                Text("Sin reservas en este viaje",
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                            }
+                        }
+                    } else {
+                        reservas.forEach { reserva ->
+                            val cal = calificaciones.find {
+                                it.pasajero?.idUsuario == reserva.usuario?.idUsuario
+                            }
 
-                                Spacer(Modifier.height(8.dp))
-
-                                val cal = calificaciones.find {
-                                    it.pasajero?.idUsuario == reserva.usuario?.idUsuario
-                                }
-                                if (cal != null) {
-                                    HorizontalDivider()
-                                    Spacer(Modifier.height(6.dp))
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        (1..5).forEach { i ->
-                                            Icon(
-                                                if (i <= cal.puntuacion) Icons.Filled.Star
-                                                else Icons.Filled.StarBorder,
-                                                null,
-                                                tint = MaterialTheme.colorScheme.tertiary,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                        if (!cal.comentario.isNullOrBlank()) {
-                                            Spacer(Modifier.width(8.dp))
-                                            Text("\"${cal.comentario}\"",
+                            Card(modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Row(modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(reserva.usuario?.nombre ?: "-",
+                                                fontWeight = FontWeight.SemiBold)
+                                            Text(
+                                                reserva.usuario?.telefono ?: "Sin teléfono",
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                            if (!reserva.usuario?.correo.isNullOrBlank()) {
+                                                Text(
+                                                    reserva.usuario?.correo ?: "",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f))
+                                            }
+                                        }
+                                        AssistChip(
+                                            onClick = {},
+                                            label = {
+                                                Text(
+                                                    if (reserva.confirmada) "✓ Confirmado" else "Pendiente",
+                                                    style = MaterialTheme.typography.labelSmall)
+                                            },
+                                            colors = AssistChipDefaults.assistChipColors(
+                                                containerColor = if (reserva.confirmada)
+                                                    MaterialTheme.colorScheme.primaryContainer
+                                                else MaterialTheme.colorScheme.surfaceVariant
+                                            )
+                                        )
+                                    }
+
+                                    // Calificación recibida (si existe)
+                                    if (cal != null) {
+                                        HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            (1..5).forEach { i ->
+                                                Icon(
+                                                    if (i <= cal.puntuacion) Icons.Filled.Star
+                                                    else Icons.Filled.StarBorder,
+                                                    null,
+                                                    tint = MaterialTheme.colorScheme.tertiary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                            if (!cal.comentario.isNullOrBlank()) {
+                                                Spacer(Modifier.width(8.dp))
+                                                Text("\"${cal.comentario}\"",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                                            }
                                         }
                                     }
-                                }
 
-                                Spacer(Modifier.height(8.dp))
+                                    Spacer(Modifier.height(10.dp))
 
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(
-                                        onClick = {
-                                            navController.navigate(
-                                                "conductor_perfil/${reserva.usuario?.idUsuario}")
-                                        },
-                                        modifier = Modifier.weight(1f)
+                                    // ── Botones de acción: Ver perfil | Confirmar | Cancelar reserva ──
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Icon(Icons.Filled.Person, null,
-                                            modifier = Modifier.size(16.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                        Text("Ver perfil",
-                                            style = MaterialTheme.typography.labelSmall)
-                                    }
-
-                                    if (!reserva.confirmada) {
-                                        Button(
+                                        // Ver perfil
+                                        OutlinedButton(
                                             onClick = {
-                                                reservaViewModel.confirmarReserva(reserva.idReserva)
+                                                navController.navigate(
+                                                    "pasajero_perfil/${reserva.usuario?.idUsuario}")
                                             },
-                                            modifier = Modifier.weight(1f)
+                                            modifier = Modifier.weight(1f),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                                         ) {
-                                            Icon(Icons.Filled.CheckCircle, null,
-                                                modifier = Modifier.size(16.dp))
-                                            Spacer(Modifier.width(4.dp))
-                                            Text("Confirmar",
+                                            Icon(Icons.Filled.Person, null,
+                                                modifier = Modifier.size(14.dp))
+                                            Spacer(Modifier.width(3.dp))
+                                            Text("Ver perfil",
+                                                style = MaterialTheme.typography.labelSmall)
+                                        }
+
+                                        // Confirmar (solo si no confirmada)
+                                        if (!reserva.confirmada) {
+                                            Button(
+                                                onClick = {
+                                                    reservaViewModel.confirmarReserva(reserva.idReserva)
+                                                },
+                                                modifier = Modifier.weight(1f),
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                                            ) {
+                                                Icon(Icons.Filled.CheckCircle, null,
+                                                    modifier = Modifier.size(14.dp))
+                                                Spacer(Modifier.width(3.dp))
+                                                Text("Confirmar",
+                                                    style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        }
+
+                                        // NUEVO: Cancelar reserva del pasajero
+                                        OutlinedButton(
+                                            onClick = { reservaACancelar = reserva },
+                                            modifier = Modifier.weight(1f),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                                            colors = ButtonDefaults.outlinedButtonColors(
+                                                contentColor = MaterialTheme.colorScheme.error)
+                                        ) {
+                                            Icon(Icons.Filled.PersonRemove, null,
+                                                modifier = Modifier.size(14.dp))
+                                            Spacer(Modifier.width(3.dp))
+                                            Text("Cancelar",
                                                 style = MaterialTheme.typography.labelSmall)
                                         }
                                     }
@@ -256,75 +387,75 @@ fun ViajeActivoDetalleScreen(
                             }
                         }
                     }
+
+                    Spacer(Modifier.height(16.dp))
                 }
-                Spacer(Modifier.height(16.dp))
-            }
 
-            // ── Diálogos ──────────────────────────────────────────
-            if (viajeACompletar) {
-                AlertDialog(
-                    onDismissRequest = { viajeACompletar = false },
-                    shape = RoundedCornerShape(20.dp),
-                    title = { Text("Completar viaje") },
-                    text  = { Text("Marca el viaje como completado. " +
-                            "Los pasajeros podrán calificarte después de esto.") },
-                    confirmButton = {
-                        Button(onClick = {
-                            scope.launch {
-                                try {
-                                    RetrofitClient.apiService.completarViaje(idViaje)
-                                    recargar()
-                                    Toast.makeText(context, "Viaje marcado como completado",
-                                        Toast.LENGTH_SHORT).show()
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "Error: ${e.message}",
-                                        Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                            viajeACompletar = false
-                        }) { Text("Sí, completar") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { viajeACompletar = false }) { Text("Cancelar") }
-                    }
-                )
-            }
-
-            if (viajeACancelar) {
-                AlertDialog(
-                    onDismissRequest = { viajeACancelar = false },
-                    shape = RoundedCornerShape(20.dp),
-                    title = { Text("Cancelar viaje") },
-                    text  = { Text("¿Cancelar este viaje? Los pasajeros con reserva " +
-                            "serán notificados.") },
-                    confirmButton = {
-                        Button(
-                            onClick = {
+                // ── Diálogos del viaje ──────────────────────────────────
+                if (viajeACompletar) {
+                    AlertDialog(
+                        onDismissRequest = { viajeACompletar = false },
+                        shape = RoundedCornerShape(20.dp),
+                        title = { Text("Completar viaje") },
+                        text  = { Text("Marca el viaje como completado. " +
+                                "Los pasajeros confirmados podrán calificarte después de esto.") },
+                        confirmButton = {
+                            Button(onClick = {
                                 scope.launch {
                                     try {
-                                        RetrofitClient.apiService.cancelarViaje(idViaje)
-                                        Toast.makeText(context, "Viaje cancelado",
+                                        RetrofitClient.apiService.completarViaje(idViaje)
+                                        recargar()
+                                        Toast.makeText(context, "Viaje marcado como completado",
                                             Toast.LENGTH_SHORT).show()
-                                        navController.popBackStack()
                                     } catch (e: Exception) {
                                         Toast.makeText(context, "Error: ${e.message}",
                                             Toast.LENGTH_SHORT).show()
                                     }
                                 }
-                                viajeACancelar = false
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.error)
-                        ) { Text("Sí, cancelar") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { viajeACancelar = false }) { Text("Volver") }
-                    }
-                )
+                                viajeACompletar = false
+                            }) { Text("Sí, completar") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { viajeACompletar = false }) { Text("Cancelar") }
+                        }
+                    )
+                }
+
+                if (viajeACancelar) {
+                    AlertDialog(
+                        onDismissRequest = { viajeACancelar = false },
+                        shape = RoundedCornerShape(20.dp),
+                        title = { Text("Cancelar viaje") },
+                        text  = { Text("¿Cancelar este viaje? Los pasajeros con reserva " +
+                                "serán notificados.") },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    scope.launch {
+                                        try {
+                                            RetrofitClient.apiService.cancelarViaje(idViaje)
+                                            Toast.makeText(context, "Viaje cancelado",
+                                                Toast.LENGTH_SHORT).show()
+                                            navController.popBackStack()
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Error: ${e.message}",
+                                                Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    viajeACancelar = false
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error)
+                            ) { Text("Sí, cancelar") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { viajeACancelar = false }) { Text("Volver") }
+                        }
+                    )
+                }
             }
         }
     }
-}
 }
 
 @Composable

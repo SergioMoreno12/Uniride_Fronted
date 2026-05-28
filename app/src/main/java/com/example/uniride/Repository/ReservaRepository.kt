@@ -19,6 +19,7 @@ class ReservaRepository {
     suspend fun confirmarReserva(idReserva: Long): Reserva =
         RetrofitClient.apiService.confirmarReserva(idReserva)
 
-    suspend fun cancelarReserva(idReserva: Long): String =
+    suspend fun cancelarReserva(idReserva: Long): retrofit2.Response<Void> =
         RetrofitClient.apiService.cancelarReserva(idReserva)
+
 }

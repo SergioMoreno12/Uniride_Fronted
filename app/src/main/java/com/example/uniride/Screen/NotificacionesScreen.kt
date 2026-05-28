@@ -17,6 +17,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ViewModel.NotifViewModel
+import com.example.uniride.ui.theme.Routes
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,9 +83,26 @@ fun NotificacionesScreen(
                     lista.forEach { notif ->
                         Card(
                             onClick = {
+                                // Marcar como leída
                                 if (!notif.leida) {
                                     sesion?.idUsuario?.let { uid ->
                                         notifViewModel.marcarLeida(notif.idNotificacion, uid)
+                                    }
+                                }
+                                // Navegar según rol y datos disponibles
+                                when (sesion?.rol) {
+                                    "conductor" -> {
+                                        notif.idViaje?.let { idViaje ->
+                                            navController.navigate("viaje_activo/$idViaje")
+                                        }
+                                    }
+                                    "pasajero" -> {
+                                        when {
+                                            notif.idReserva != null ->
+                                                navController.navigate("reserva_detalle/${notif.idReserva}")
+                                            notif.idViaje != null ->
+                                                navController.navigate(Routes.MIS_RESERVAS)
+                                        }
                                     }
                                 }
                             },
@@ -96,8 +114,11 @@ fun NotificacionesScreen(
                                 else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
                             )
                         ) {
-                            Row(modifier = Modifier.padding(14.dp),
-                                verticalAlignment = Alignment.Top) {
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                // Ícono de estado (leída/no leída)
                                 Icon(
                                     if (notif.leida) Icons.Filled.MarkEmailRead
                                     else Icons.Filled.MarkEmailUnread,
@@ -105,22 +126,59 @@ fun NotificacionesScreen(
                                     tint = if (notif.leida)
                                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                                     else MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(22.dp))
+                                    modifier = Modifier.size(22.dp).padding(top = 2.dp))
                                 Spacer(Modifier.width(10.dp))
+
+                                // Contenido
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(notif.titulo ?: "Notificación",
+                                    Text(notif.titulo.ifBlank { "Notificación" },
                                         fontWeight = if (notif.leida) FontWeight.Normal
                                         else FontWeight.Bold,
                                         style = MaterialTheme.typography.bodyMedium)
                                     Spacer(Modifier.height(2.dp))
-                                    Text(notif.mensaje ?: "",
+                                    Text(notif.mensaje,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                                     Spacer(Modifier.height(4.dp))
-                                    Text(notif.fechaEnvio?.toString()?.take(16)
-                                        ?.replace("T", " ") ?: "",
+                                    // Hint visual de que es tappable si tiene destino
+                                    val tieneDEstino = when (sesion?.rol) {
+                                        "conductor" -> notif.idViaje != null
+                                        "pasajero"  -> notif.idReserva != null || notif.idViaje != null
+                                        else        -> false
+                                    }
+                                    if (tieneDEstino) {
+                                        Text(
+                                            when (sesion?.rol) {
+                                                "conductor" -> "Toca para confirmar reserva →"
+                                                else        -> "Toca para ver tu reserva →"
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        notif.fechaEnvio.take(16).replace("T", " "),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                                }
+
+                                // Botón eliminar
+                                IconButton(
+                                    onClick = {
+                                        sesion?.idUsuario?.let { uid ->
+                                            notifViewModel.eliminarNotificacion(
+                                                notif.idNotificacion, uid)
+                                        }
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.DeleteOutline,
+                                        contentDescription = "Eliminar notificación",
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                             }
                         }

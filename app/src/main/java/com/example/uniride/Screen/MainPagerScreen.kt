@@ -14,13 +14,15 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun MainPagerScreen(
-    navController: NavController,
-    startPage: Int = 0,
-    authViewModel: AuthViewModel       = viewModel(),
-    viajeViewModel: ViajeViewModel     = viewModel(),
-    reservaViewModel: ReservaViewModel = viewModel(),
-    perfilViewModel: PerfilViewModel   = viewModel(),
-    notifViewModel: NotifViewModel     = viewModel()
+    navController:    NavController,
+    startPage:        Int               = 0,
+    authViewModel:    AuthViewModel     = viewModel(),
+    viajeViewModel:   ViajeViewModel    = viewModel(),
+    reservaViewModel: ReservaViewModel  = viewModel(),
+    // FIX: Agregar adminViewModel compartido como parámetro
+    adminViewModel:   AdminViewModel    = viewModel(),
+    perfilViewModel:  PerfilViewModel   = viewModel(),
+    notifViewModel:   NotifViewModel    = viewModel()
 ) {
     val sesionLive by authViewModel.loginResult.observeAsState(authViewModel.sesionActual)
     val sesion      = sesionLive ?: authViewModel.sesionActual
@@ -69,7 +71,6 @@ fun MainPagerScreen(
             when (pages[page]) {
                 "home"           -> HomeScreen(navController, authViewModel, viajeViewModel)
                 "mis_reservas"   -> MisReservasScreen(navController, authViewModel, reservaViewModel)
-                // ✅ FIX: pasar lambda para cambiar al tab Publicar sin navController.navigate
                 "mis_viajes"     -> MisViajesScreen(
                     navController    = navController,
                     authViewModel    = authViewModel,
@@ -78,14 +79,15 @@ fun MainPagerScreen(
                     onPublicarViaje  = { scope.launch { pagerState.animateScrollToPage(1) } }
                 )
                 "publicar"       -> PublicarViajeScreen(
-                    navController  = navController,
-                    authViewModel  = authViewModel,
-                    viajeViewModel = viajeViewModel,
+                    navController    = navController,
+                    authViewModel    = authViewModel,
+                    viajeViewModel   = viajeViewModel,
                     onViajePublicado = { scope.launch { pagerState.animateScrollToPage(0) } }
                 )
                 "notificaciones" -> NotificacionesScreen(navController, authViewModel, notifViewModel)
                 "perfil"         -> PerfilScreen(navController, authViewModel, perfilViewModel)
-                "admin"          -> AdminScreen(navController, viewModel(), authViewModel)
+                // FIX: Pasar el adminViewModel compartido en lugar de viewModel()
+                "admin"          -> AdminScreen(navController, adminViewModel, authViewModel)
             }
         }
     }

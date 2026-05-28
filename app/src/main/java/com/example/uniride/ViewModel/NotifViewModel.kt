@@ -44,4 +44,19 @@ class NotifViewModel : ViewModel() {
             } catch (e: Exception) { }
         }
     }
+
+    fun eliminarNotificacion(idNotificacion: Long, idUsuario: Long) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    RetrofitClient.apiService.eliminarNotificacion(idNotificacion)
+                }
+                // Actualizar lista localmente sin recargar del servidor
+                val listaActual = _notificaciones.value?.toMutableList() ?: mutableListOf()
+                listaActual.removeAll { it.idNotificacion == idNotificacion }
+                _notificaciones.postValue(listaActual)
+                _sinLeer.postValue(listaActual.count { !it.leida })
+            } catch (e: Exception) { }
+        }
+    }
 }

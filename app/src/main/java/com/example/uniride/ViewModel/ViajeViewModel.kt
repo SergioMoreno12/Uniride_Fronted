@@ -53,6 +53,7 @@ class ViajeViewModel : ViewModel() {
                 }
 
                 if (idUsuario != null) {
+                    // 1. Cargar viajes ya reservados por el usuario
                     try {
                         val reservas = withContext(Dispatchers.IO) {
                             RetrofitClient.apiService.reservasPorUsuario(idUsuario)
@@ -60,9 +61,26 @@ class ViajeViewModel : ViewModel() {
                         val idsReservados = reservas.mapNotNull { it.viaje?.idViaje }.toSet()
                         _viajesReservados.postValue(idsReservados)
                     } catch (e: Exception) { }
+
+                    // FIX: Cargar viajes propios del conductor para no mostrar "Reservar" en los suyos
+                    try {
+                        val vehiculos = withContext(Dispatchers.IO) {
+                            RetrofitClient.apiService.vehiculosPorUsuario(idUsuario)
+                        }
+                        val vehiculoIds = vehiculos.map { it.idVehiculo }.toSet()
+                        val idsPropios = lista
+                            .filter { v -> v.vehiculo?.idVehiculo?.let { vehiculoIds.contains(it) } == true }
+                            .map { it.idViaje }
+                            .toSet()
+                        _viajesPropios.postValue(idsPropios)
+                    } catch (e: Exception) {
+                        _viajesPropios.postValue(emptySet())
+                    }
+                } else {
+                    _viajesReservados.postValue(emptySet())
+                    _viajesPropios.postValue(emptySet())
                 }
 
-                _viajesPropios.postValue(emptySet())
                 _viajes.postValue(lista)
             } catch (e: Exception) {
                 _mensaje.postValue("Error al cargar viajes: ${e.message}")
@@ -80,8 +98,6 @@ class ViajeViewModel : ViewModel() {
         }
     }
 
-    // ✅ CORREGIDO: usa listarConductores() en lugar de obtenerUsuarios() con filtro
-    // obtenerUsuarios() requiere permisos de admin; listarConductores() es público
     fun cargarConductores() {
         viewModelScope.launch {
             try {
@@ -89,20 +105,33 @@ class ViajeViewModel : ViewModel() {
                     RetrofitClient.apiService.listarConductores()
                 }
                 _conductores.postValue(lista)
-            } catch (e: Exception) {
-                // Silencioso: si falla no se muestra la sección
-            }
+            } catch (e: Exception) { }
         }
     }
 
-    fun cargarMisViajes(idVehiculo: Long) {
+    // FIX: Carga viajes de TODOS los vehículos del conductor, no solo el primero
+    fun cargarMisViajes(idUsuario: Long) {
         viewModelScope.launch {
             _cargando.postValue(true)
             try {
-                val lista = withContext(Dispatchers.IO) {
-                    viajeService.viajesPorVehiculo(idVehiculo)
+                val vehiculos = withContext(Dispatchers.IO) {
+                    RetrofitClient.apiService.vehiculosPorUsuario(idUsuario)
                 }
-                _misViajes.postValue(lista)
+                if (vehiculos.isEmpty()) {
+                    _misViajes.postValue(emptyList())
+                } else {
+                    val todosLosViajes = mutableListOf<Viaje>()
+                    for (vehiculo in vehiculos) {
+                        val viajesVehiculo = withContext(Dispatchers.IO) {
+                            viajeService.viajesPorVehiculo(vehiculo.idVehiculo)
+                        }
+                        todosLosViajes.addAll(viajesVehiculo)
+                    }
+                    // Ordenar por fecha descendente y quitar duplicados
+                    _misViajes.postValue(
+                        todosLosViajes.distinctBy { it.idViaje }.sortedByDescending { it.fechaHora }
+                    )
+                }
             } catch (e: Exception) {
                 _mensaje.postValue("Error: ${e.message}")
             }

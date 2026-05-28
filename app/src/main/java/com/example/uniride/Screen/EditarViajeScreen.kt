@@ -306,7 +306,7 @@ fun EditarViajeScreen(
                     guardando = true
                     scope.launch {
                         try {
-                            RetrofitClient.apiService.actualizarViaje(
+                            RetrofitClient.apiService.editarViaje(
                                 idViaje,
                                 ViajeDTO(
                                     origen           = origenFinal,

@@ -89,9 +89,15 @@ class ReservaViewModel : ViewModel() {
         viewModelScope.launch {
             _cargando.postValue(true)
             try {
-                withContext(Dispatchers.IO) { reservaService.cancelarReserva(idReserva) }
-                _mensaje.postValue("Reserva cancelada")
-                cargarMisReservas(idUsuario)
+                val response = withContext(Dispatchers.IO) {
+                    reservaService.cancelarReserva(idReserva)
+                }
+                if (response.isSuccessful) {
+                    _mensaje.postValue("Reserva cancelada")
+                    cargarMisReservas(idUsuario)
+                } else {
+                    _mensaje.postValue("Error al cancelar (${response.code()})")
+                }
             } catch (e: Exception) {
                 _mensaje.postValue("Error: ${e.message}")
             }

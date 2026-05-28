@@ -56,31 +56,44 @@ fun NotificacionesScreen(
                 .sortedByDescending { it.fechaEnvio }
 
             if (lista.isEmpty()) {
-                Column(modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState()),
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
                     Spacer(Modifier.height(200.dp))
-                    Icon(Icons.Filled.NotificationsNone, null,
+                    Icon(
+                        Icons.Filled.NotificationsNone, null,
                         modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                    )
                     Spacer(Modifier.height(8.dp))
-                    Text("Sin notificaciones",
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                    Text("Desliza hacia abajo para recargar",
+                    Text(
+                        "Sin notificaciones",
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    )
+                    Text(
+                        "Desliza hacia abajo para recargar",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    )
                 }
             } else {
-                Column(modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     lista.forEach { notif ->
+
+                        // Detectar si es una notificación de calificación
+                        val esNotifCalificacion = notif.titulo.contains("calificaci", ignoreCase = true) ||
+                                notif.titulo.contains("⭐")
+
                         Card(
                             onClick = {
                                 // Marcar como leída
@@ -89,11 +102,16 @@ fun NotificacionesScreen(
                                         notifViewModel.marcarLeida(notif.idNotificacion, uid)
                                     }
                                 }
-                                // Navegar según rol y datos disponibles
+                                // Navegar según tipo de notificación y rol
                                 when (sesion?.rol) {
                                     "conductor" -> {
-                                        notif.idViaje?.let { idViaje ->
-                                            navController.navigate("viaje_activo/$idViaje")
+                                        when {
+                                            // Notificación de calificación → ir a Mis calificaciones
+                                            esNotifCalificacion ->
+                                                navController.navigate(Routes.MIS_CALIFICACIONES)
+                                            // Notificación de reserva → ir al viaje activo
+                                            notif.idViaje != null ->
+                                                navController.navigate("viaje_activo/${notif.idViaje}")
                                         }
                                     }
                                     "pasajero" -> {
@@ -118,39 +136,56 @@ fun NotificacionesScreen(
                                 modifier = Modifier.padding(14.dp),
                                 verticalAlignment = Alignment.Top
                             ) {
-                                // Ícono de estado (leída/no leída)
+                                // Ícono: estrella para calificaciones, email para el resto
                                 Icon(
-                                    if (notif.leida) Icons.Filled.MarkEmailRead
-                                    else Icons.Filled.MarkEmailUnread,
+                                    when {
+                                        esNotifCalificacion -> Icons.Filled.Star
+                                        notif.leida         -> Icons.Filled.MarkEmailRead
+                                        else                -> Icons.Filled.MarkEmailUnread
+                                    },
                                     null,
-                                    tint = if (notif.leida)
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                                    else MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(22.dp).padding(top = 2.dp))
+                                    tint = when {
+                                        esNotifCalificacion ->
+                                            MaterialTheme.colorScheme.tertiary
+                                        notif.leida ->
+                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                        else ->
+                                            MaterialTheme.colorScheme.primary
+                                    },
+                                    modifier = Modifier.size(22.dp).padding(top = 2.dp)
+                                )
                                 Spacer(Modifier.width(10.dp))
 
-                                // Contenido
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(notif.titulo.ifBlank { "Notificación" },
+                                    Text(
+                                        notif.titulo.ifBlank { "Notificación" },
                                         fontWeight = if (notif.leida) FontWeight.Normal
                                         else FontWeight.Bold,
-                                        style = MaterialTheme.typography.bodyMedium)
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
                                     Spacer(Modifier.height(2.dp))
-                                    Text(notif.mensaje,
+                                    Text(
+                                        notif.mensaje,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    )
                                     Spacer(Modifier.height(4.dp))
-                                    // Hint visual de que es tappable si tiene destino
-                                    val tieneDEstino = when (sesion?.rol) {
-                                        "conductor" -> notif.idViaje != null
+
+                                    // Hint de navegación
+                                    val tieneDestino = when (sesion?.rol) {
+                                        "conductor" -> esNotifCalificacion || notif.idViaje != null
                                         "pasajero"  -> notif.idReserva != null || notif.idViaje != null
                                         else        -> false
                                     }
-                                    if (tieneDEstino) {
+                                    if (tieneDestino) {
                                         Text(
-                                            when (sesion?.rol) {
-                                                "conductor" -> "Toca para confirmar reserva →"
-                                                else        -> "Toca para ver tu reserva →"
+                                            when {
+                                                esNotifCalificacion && sesion?.rol == "conductor" ->
+                                                    "Toca para ver tus calificaciones →"
+                                                sesion?.rol == "conductor" ->
+                                                    "Toca para confirmar reserva →"
+                                                else ->
+                                                    "Toca para ver tu reserva →"
                                             },
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
@@ -160,15 +195,15 @@ fun NotificacionesScreen(
                                     Text(
                                         notif.fechaEnvio.take(16).replace("T", " "),
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    )
                                 }
 
                                 // Botón eliminar
                                 IconButton(
-                                    onClick = {
+                                    onClick  = {
                                         sesion?.idUsuario?.let { uid ->
-                                            notifViewModel.eliminarNotificacion(
-                                                notif.idNotificacion, uid)
+                                            notifViewModel.eliminarNotificacion(notif.idNotificacion, uid)
                                         }
                                     },
                                     modifier = Modifier.size(36.dp)

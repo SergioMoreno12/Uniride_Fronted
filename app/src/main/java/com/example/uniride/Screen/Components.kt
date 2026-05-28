@@ -197,7 +197,9 @@ fun DateTimePickerField(
     minDate: LocalDate = LocalDate.now()
 ) {
     var mostrarDialogo by remember { mutableStateOf(false) }
-    val minMillis = minDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+    val minMillis = minDate.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = System.currentTimeMillis(),
         selectableDates = object : SelectableDates {
@@ -221,8 +223,9 @@ fun DateTimePickerField(
             confirmButton    = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
+                        // FIX: interpretar los millis como fecha UTC, no local
                         val date = java.time.Instant.ofEpochMilli(millis)
-                            .atZone(ZoneId.systemDefault()).toLocalDate()
+                            .atZone(java.time.ZoneOffset.UTC).toLocalDate()
                         onDateSelected(date.toString())
                     }
                     mostrarDialogo = false

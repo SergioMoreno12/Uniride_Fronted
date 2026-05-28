@@ -35,14 +35,20 @@ fun ViajesPorConductorScreen(
     reservaViewModel: ReservaViewModel = viewModel(),
     fechaFiltro: String?               = null
 ) {
-    val scope = rememberCoroutineScope()
-    val ahora = LocalDateTime.now()
-    var todos       by remember { mutableStateOf<List<Viaje>>(emptyList()) }
-    var cargando    by remember { mutableStateOf(true) }
-    var fechaSel    by remember(fechaFiltro) { mutableStateOf(fechaFiltro) }
-    var reservasMap by remember { mutableStateOf<Map<Long, Int>>(emptyMap()) }
+    val sesion    = authViewModel.sesionActual
+    val scope     = rememberCoroutineScope()
+    val ahora     = LocalDateTime.now()
+
+    var todos        by remember { mutableStateOf<List<Viaje>>(emptyList()) }
+    var cargando     by remember { mutableStateOf(true) }
+    var fechaSel     by remember(fechaFiltro) { mutableStateOf(fechaFiltro) }
+    var tipoViajeSel by remember { mutableStateOf<String?>(null) }
+    var reservasMap  by remember { mutableStateOf<Map<Long, Int>>(emptyMap()) }
 
     val viajesReservados by viajeViewModel.viajesReservados.observeAsState(emptySet())
+
+    // El pasajero está viendo su propio perfil de conductor → ocultar todos sus viajes
+    val esPropiosConductor = sesion?.idUsuario == idConductor
 
     suspend fun cargar() {
         cargando = true
@@ -54,7 +60,6 @@ fun ViajesPorConductorScreen(
             }
             todos = acumulado
 
-            // Cargar conteos de reservas en paralelo
             val disponibles = todos.filter { it.estado == "disponible" }
             if (disponibles.isNotEmpty()) {
                 reservasMap = coroutineScope {
@@ -76,7 +81,10 @@ fun ViajesPorConductorScreen(
 
     val base = todos.filter { v ->
         if (v.estado != "disponible") return@filter false
+        // Ocultar viajes ya reservados por el usuario
         if (v.idViaje in (viajesReservados ?: emptySet())) return@filter false
+        // Ocultar viajes propios (usuario es el conductor)
+        if (esPropiosConductor) return@filter false
         val cupos = v.cuposDisponibles
             ?: reservasMap[v.idViaje]?.let { (v.vehiculo?.capacidad ?: 0) - it }
             ?: (v.vehiculo?.capacidad ?: Int.MAX_VALUE)
@@ -86,8 +94,12 @@ fun ViajesPorConductorScreen(
         } catch (e: Exception) { null }
         dt != null && !dt.isBefore(ahora)
     }
+
     val fechas = base.map { it.fechaHora.take(10) }.distinct().sorted()
-    val lista  = if (fechaSel == null) base else base.filter { it.fechaHora.take(10) == fechaSel }
+
+    val lista = base
+        .let { l -> if (fechaSel == null) l else l.filter { it.fechaHora.take(10) == fechaSel } }
+        .let { l -> if (tipoViajeSel == null) l else l.filter { it.tipoViaje == tipoViajeSel } }
 
     Scaffold(
         topBar = {
@@ -109,31 +121,89 @@ fun ViajesPorConductorScreen(
             modifier     = Modifier.fillMaxSize().padding(padding)
         ) {
             Column(Modifier.fillMaxSize()) {
+
+                // ── Filtro de fecha ──────────────────────────────────────
                 HorizontalDatePicker(fechas, fechaSel) { fechaSel = it }
+
+                // ── Filtro de tipo de viaje ──────────────────────────────
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Tipo:",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    FilterChip(
+                        selected = tipoViajeSel == null,
+                        onClick  = { tipoViajeSel = null },
+                        label    = { Text("Todos") }
+                    )
+                    FilterChip(
+                        selected = tipoViajeSel == "ida",
+                        onClick  = { tipoViajeSel = if (tipoViajeSel == "ida") null else "ida" },
+                        label    = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.School, null, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Ida")
+                            }
+                        }
+                    )
+                    FilterChip(
+                        selected = tipoViajeSel == "vuelta",
+                        onClick  = { tipoViajeSel = if (tipoViajeSel == "vuelta") null else "vuelta" },
+                        label    = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Home, null, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Vuelta")
+                            }
+                        }
+                    )
+                }
+
                 HorizontalDivider()
 
                 if (lista.isEmpty() && !cargando) {
-                    Column(modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState()),
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState()),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center) {
+                        verticalArrangement = Arrangement.Center
+                    ) {
                         Spacer(Modifier.height(180.dp))
-                        Icon(Icons.Filled.SearchOff, null,
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                            modifier = Modifier.size(48.dp))
+                        Icon(
+                            Icons.Filled.SearchOff, null,
+                            tint     = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                            modifier = Modifier.size(48.dp)
+                        )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            if (fechaSel != null) "Sin viajes para esa fecha"
-                            else "Este conductor no tiene viajes disponibles",
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                            when {
+                                esPropiosConductor -> "No puedes reservar tus propios viajes"
+                                fechaSel != null && tipoViajeSel != null ->
+                                    "Sin viajes de $tipoViajeSel para esa fecha"
+                                fechaSel != null     -> "Sin viajes para esa fecha"
+                                tipoViajeSel != null -> "Sin viajes de $tipoViajeSel de este conductor"
+                                else                 -> "Este conductor no tiene viajes disponibles"
+                            },
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        )
                     }
                 } else {
-                    Column(modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         lista.forEach { v ->
                             ViajeMiniCard(
                                 v             = v,

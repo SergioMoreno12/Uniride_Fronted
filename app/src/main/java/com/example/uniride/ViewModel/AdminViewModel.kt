@@ -12,7 +12,7 @@ import kotlinx.coroutines.withContext
 
 class AdminViewModel : ViewModel() {
 
-    // ── Listas globales ───────────────────────────────────────────────
+    // ── Listas globales ──────────────────────────────────────────────
     private val _usuarios       = MutableLiveData<List<Usuario>>(emptyList())
     val usuarios: MutableLiveData<List<Usuario>> = _usuarios
 
@@ -34,59 +34,55 @@ class AdminViewModel : ViewModel() {
     private val _notificaciones = MutableLiveData<List<Notificacion>>(emptyList())
     val notificaciones: MutableLiveData<List<Notificacion>> = _notificaciones
 
-    // ── Datos de detalle de un usuario ────────────────────────────────
-    private val _vehiculosUsuario   = MutableLiveData<List<Vehiculo>>(emptyList())
+    // ── Datos de detalle de un usuario ───────────────────────────────
+    private val _vehiculosUsuario      = MutableLiveData<List<Vehiculo>>(emptyList())
     val vehiculosUsuario: MutableLiveData<List<Vehiculo>> = _vehiculosUsuario
 
-    private val _viajesUsuario      = MutableLiveData<List<Viaje>>(emptyList())
+    private val _viajesUsuario         = MutableLiveData<List<Viaje>>(emptyList())
     val viajesUsuario: MutableLiveData<List<Viaje>> = _viajesUsuario
 
-    private val _reservasUsuario    = MutableLiveData<List<Reserva>>(emptyList())
+    private val _reservasUsuario       = MutableLiveData<List<Reserva>>(emptyList())
     val reservasUsuario: MutableLiveData<List<Reserva>> = _reservasUsuario
 
     private val _calificacionesUsuario = MutableLiveData<List<Calificacion>>(emptyList())
     val calificacionesUsuario: MutableLiveData<List<Calificacion>> = _calificacionesUsuario
 
-    private val _reportesUsuario    = MutableLiveData<List<Reporte>>(emptyList())
+    private val _reportesUsuario       = MutableLiveData<List<Reporte>>(emptyList())
     val reportesUsuario: MutableLiveData<List<Reporte>> = _reportesUsuario
 
-    private val _promedioUsuario    = MutableLiveData<Double>(0.0)
+    private val _promedioUsuario       = MutableLiveData<Double>(0.0)
     val promedioUsuario: MutableLiveData<Double> = _promedioUsuario
 
-    private val _mensaje            = MutableLiveData<String?>(null)
+    private val _mensaje               = MutableLiveData<String?>(null)
     val mensaje: MutableLiveData<String?> = _mensaje
 
-    private val _cargando           = MutableLiveData(false)
+    private val _cargando              = MutableLiveData(false)
     val cargando: MutableLiveData<Boolean> = _cargando
 
-    private val _cargandoDetalle    = MutableLiveData(false)
+    private val _cargandoDetalle       = MutableLiveData(false)
     val cargandoDetalle: MutableLiveData<Boolean> = _cargandoDetalle
 
-    // ── Carga de detalle completo de un usuario ───────────────────────
+    // ── Detalle completo de un usuario ───────────────────────────────
     fun cargarDetalleUsuario(idUsuario: Long, esConductor: Boolean) {
         viewModelScope.launch {
             _cargandoDetalle.postValue(true)
             try {
-                // Reservas como pasajero
                 val reservas = withContext(Dispatchers.IO) {
                     RetrofitClient.apiService.reservasPorUsuario(idUsuario)
                 }
                 _reservasUsuario.postValue(reservas)
 
-                // Reportes del usuario
                 val reportes = withContext(Dispatchers.IO) {
                     RetrofitClient.apiService.reportesPorUsuario(idUsuario)
                 }
                 _reportesUsuario.postValue(reportes)
 
                 if (esConductor) {
-                    // Vehículos
                     val vehiculos = withContext(Dispatchers.IO) {
                         RetrofitClient.apiService.vehiculosPorUsuario(idUsuario)
                     }
                     _vehiculosUsuario.postValue(vehiculos)
 
-                    // Viajes de cada vehículo
                     val todosViajes = mutableListOf<Viaje>()
                     for (v in vehiculos) {
                         val viajesVehiculo = withContext(Dispatchers.IO) {
@@ -96,7 +92,6 @@ class AdminViewModel : ViewModel() {
                     }
                     _viajesUsuario.postValue(todosViajes)
 
-                    // Calificaciones y promedio
                     val califs = withContext(Dispatchers.IO) {
                         RetrofitClient.apiService.calificacionesConductor(idUsuario)
                     }
@@ -128,7 +123,7 @@ class AdminViewModel : ViewModel() {
         _promedioUsuario.postValue(0.0)
     }
 
-    // ── Usuarios ──────────────────────────────────────────────────────
+    // ── Usuarios ─────────────────────────────────────────────────────
     fun cargarUsuarios() {
         viewModelScope.launch {
             _cargando.postValue(true)
@@ -190,7 +185,7 @@ class AdminViewModel : ViewModel() {
         }
     }
 
-    // ── Viajes ────────────────────────────────────────────────────────
+    // ── Viajes ───────────────────────────────────────────────────────
     fun cargarViajes() {
         viewModelScope.launch {
             _cargando.postValue(true)
@@ -213,7 +208,6 @@ class AdminViewModel : ViewModel() {
                     RetrofitClient.apiService.eliminarViaje(id)
                 }
                 _mensaje.postValue("Viaje eliminado")
-                // Recargar datos relevantes
                 if (idUsuario != null) cargarDetalleUsuario(idUsuario, esConductor)
                 else cargarViajes()
             } catch (e: Exception) {
@@ -222,7 +216,7 @@ class AdminViewModel : ViewModel() {
         }
     }
 
-    // ── Vehículos ─────────────────────────────────────────────────────
+    // ── Vehículos ────────────────────────────────────────────────────
     fun cargarVehiculos() {
         viewModelScope.launch {
             _cargando.postValue(true)
@@ -253,7 +247,7 @@ class AdminViewModel : ViewModel() {
         }
     }
 
-    // ── Sedes ─────────────────────────────────────────────────────────
+    // ── Sedes ────────────────────────────────────────────────────────
     fun cargarSedes() {
         viewModelScope.launch {
             _cargando.postValue(true)
@@ -299,7 +293,7 @@ class AdminViewModel : ViewModel() {
         }
     }
 
-    // ── Estadísticas ──────────────────────────────────────────────────
+    // ── Estadísticas ─────────────────────────────────────────────────
     fun cargarReservas() {
         viewModelScope.launch {
             _cargando.postValue(true)
@@ -322,7 +316,7 @@ class AdminViewModel : ViewModel() {
         cargarVehiculos()
     }
 
-    // ── Reportes ──────────────────────────────────────────────────────
+    // ── Reportes ─────────────────────────────────────────────────────
     fun cargarReportes() {
         viewModelScope.launch {
             _cargando.postValue(true)
@@ -338,23 +332,30 @@ class AdminViewModel : ViewModel() {
         }
     }
 
+    // FIX: Manejo correcto de Response<ResponseBody> para evitar
+    // LazyInitializationException al deserializar la entidad Reporte
     fun actualizarEstadoReporte(id: Long, estado: String) {
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) {
+                val response = withContext(Dispatchers.IO) {
                     RetrofitClient.apiService.actualizarReporte(
                         id, mapOf("estado" to estado)
                     )
                 }
-                _mensaje.postValue("Reporte marcado como $estado")
-                cargarReportes()
+                response.body()?.close()
+                if (response.isSuccessful) {
+                    _mensaje.postValue("Reporte marcado como $estado")
+                    cargarReportes()
+                } else {
+                    _mensaje.postValue("Error al actualizar reporte (${response.code()})")
+                }
             } catch (e: Exception) {
-                _mensaje.postValue("Error al actualizar reporte")
+                _mensaje.postValue("Error de conexión al actualizar reporte")
             }
         }
     }
 
-    // ── Notificaciones ────────────────────────────────────────────────
+    // ── Notificaciones ───────────────────────────────────────────────
     fun cargarNotificaciones() {
         viewModelScope.launch {
             _cargando.postValue(true)

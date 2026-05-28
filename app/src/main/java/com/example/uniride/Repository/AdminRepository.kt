@@ -2,6 +2,8 @@ package com.example.uniride.Repository
 
 import com.example.uniride.interfaces.RetrofitClient
 import com.example.uniride.model.*
+import okhttp3.ResponseBody
+import retrofit2.Response
 
 class AdminRepository {
 
@@ -44,7 +46,8 @@ class AdminRepository {
     suspend fun obtenerReportes(): List<Reporte> =
         RetrofitClient.apiService.obtenerReportes()
 
-    suspend fun actualizarEstadoReporte(id: Long, estado: String): Reporte =
+    // FIX: tipo de retorno actualizado a Response<ResponseBody>
+    suspend fun actualizarEstadoReporte(id: Long, estado: String): Response<ResponseBody> =
         RetrofitClient.apiService.actualizarReporte(id, mapOf("estado" to estado))
 
     suspend fun obtenerNotificaciones(): List<Notificacion> =

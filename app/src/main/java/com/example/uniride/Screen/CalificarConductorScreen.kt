@@ -17,6 +17,7 @@ import androidx.navigation.NavController
 import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.interfaces.RetrofitClient
 import com.example.uniride.model.Usuario
+import com.example.uniride.model.dto.CalificacionRequest
 import com.example.uniride.ui.theme.Routes
 import kotlinx.coroutines.launch
 
@@ -206,21 +207,21 @@ fun CalificarConductorScreen(
                         scope.launch {
                             try {
                                 val response = RetrofitClient.apiService.calificarConductor(
-                                    mapOf(
-                                        "puntuacion"  to puntuacion,
-                                        "comentario"  to comentario,
-                                        "idReserva"   to idReserva,
-                                        "idConductor" to idConductor,
-                                        "idPasajero"  to (sesion?.idUsuario ?: 0L)
+                                    CalificacionRequest(
+                                        puntuacion  = puntuacion,
+                                        comentario  = comentario,
+                                        idReserva   = idReserva,
+                                        idConductor = idConductor,
+                                        idPasajero  = sesion?.idUsuario ?: 0L
                                     )
                                 )
-                                // Descartar el body sin que Gson lo parsee
                                 response.body()?.close()
 
                                 if (!response.isSuccessful) {
                                     val errorMsg = when (response.code()) {
                                         409  -> "Ya calificaste este viaje anteriormente"
                                         400  -> "Datos inválidos, verifica la calificación"
+                                        401  -> "Sesión expirada, vuelve a iniciar sesión"
                                         else -> "Error al calificar (${response.code()})"
                                     }
                                     cargando = false
@@ -228,8 +229,6 @@ fun CalificarConductorScreen(
                                     return@launch
                                 }
 
-                                // El backend ya marca la reserva como calificada,
-                                // pero lo llamamos también por seguridad
                                 try {
                                     RetrofitClient.apiService.marcarReservaCalificada(idReserva)
                                 } catch (e: Exception) { /* ignorar */ }
@@ -241,9 +240,15 @@ fun CalificarConductorScreen(
 
                             } catch (e: Exception) {
                                 cargando = false
-                                Toast.makeText(context,
-                                    "Error de conexión. Intenta de nuevo.",
-                                    Toast.LENGTH_SHORT).show()
+                                val msg = when {
+                                    e.message?.contains("timeout", ignoreCase = true) == true ->
+                                        "El servidor tardó mucho. Intenta de nuevo."
+                                    e.message?.contains("Unable to resolve host", ignoreCase = true) == true ->
+                                        "Sin conexión a internet."
+                                    else ->
+                                        "Error de conexión. Intenta de nuevo."
+                                }
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             }
                         }
                     },

@@ -14,17 +14,13 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import coil.compose.AsyncImage
 import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.ViewModel.ViajeViewModel
 import com.example.uniride.interfaces.RetrofitClient
-import com.example.uniride.model.Viaje
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -40,20 +36,18 @@ fun HomeScreen(
     val sesion           = authViewModel.sesionActual
     val viajes           by viajeViewModel.viajes.observeAsState(emptyList())
     val sedes            by viajeViewModel.sedes.observeAsState(emptyList())
-    val conductores      by viajeViewModel.conductores.observeAsState(emptyList())
     val viajesReservados by viajeViewModel.viajesReservados.observeAsState(emptySet())
     val viajesPropios    by viajeViewModel.viajesPropios.observeAsState(emptySet())
     val cargando         by viajeViewModel.cargando.observeAsState(false)
     val ahora            = LocalDateTime.now()
-    var fechaSel         by remember { mutableStateOf<String?>(null) }
 
-    // Mapa idViaje → reservasCount, cargado en paralelo
-    var reservasMap by remember { mutableStateOf<Map<Long, Int>>(emptyMap()) }
+    var fechaSel     by remember { mutableStateOf<String?>(null) }
+    var tipoViajeSel by remember { mutableStateOf<String?>(null) }
+    var reservasMap  by remember { mutableStateOf<Map<Long, Int>>(emptyMap()) }
 
     LaunchedEffect(sesion?.idUsuario) {
         viajeViewModel.cargarDisponibles(sesion?.idUsuario)
         viajeViewModel.cargarSedes()
-        viajeViewModel.cargarConductores()
     }
 
     val viajesDisponibles = (viajes ?: emptyList()).filter { v ->
@@ -67,11 +61,35 @@ fun HomeScreen(
         } catch (e: Exception) { null }
         dt != null && !dt.isBefore(ahora)
     }
-    val fechasDisponibles = viajesDisponibles.map { it.fechaHora.take(10) }.distinct().sorted()
-    val viajesMostrados   = if (fechaSel == null) viajesDisponibles
-    else viajesDisponibles.filter { it.fechaHora.take(10) == fechaSel }
 
-    // Cargar conteos de reservas en paralelo cuando cambia la lista visible
+    // Nombres de sedes para excluirlos de la lista de ciudades
+    val sedeNombres = (sedes ?: emptyList())
+        .map { it.nombreSede.trim().lowercase() }
+        .toSet()
+
+    // Ciudades únicas de origen (excluye nombres de sedes)
+    val ciudadesOrigen = viajesDisponibles
+        .map { it.origen.trim() }
+        .filter { it.lowercase() !in sedeNombres }
+        .distinct()
+        .sorted()
+
+    // Ciudades únicas de destino (excluye nombres de sedes)
+    val ciudadesDestino = viajesDisponibles
+        .map { it.destino.trim() }
+        .filter { it.lowercase() !in sedeNombres }
+        .distinct()
+        .sorted()
+
+    val fechasDisponibles = viajesDisponibles
+        .map { it.fechaHora.take(10) }
+        .distinct()
+        .sorted()
+
+    val viajesMostrados = viajesDisponibles
+        .let { l -> if (fechaSel == null) l else l.filter { it.fechaHora.take(10) == fechaSel } }
+        .let { l -> if (tipoViajeSel == null) l else l.filter { it.tipoViaje == tipoViajeSel } }
+
     LaunchedEffect(viajesMostrados) {
         val visibles = viajesMostrados.take(10)
         if (visibles.isNotEmpty()) {
@@ -102,12 +120,56 @@ fun HomeScreen(
                 reservasMap = emptyMap()
                 viajeViewModel.cargarDisponibles(sesion?.idUsuario)
                 viajeViewModel.cargarSedes()
-                viajeViewModel.cargarConductores()
             },
             modifier = Modifier.fillMaxSize().padding(padding)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
+
+                // ── Filtro de fecha ──────────────────────────────────────
                 HorizontalDatePicker(fechasDisponibles, fechaSel) { fechaSel = it }
+
+                // ── Filtro de tipo de viaje ──────────────────────────────
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Tipo:",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    FilterChip(
+                        selected = tipoViajeSel == null,
+                        onClick  = { tipoViajeSel = null },
+                        label    = { Text("Todos") }
+                    )
+                    FilterChip(
+                        selected = tipoViajeSel == "ida",
+                        onClick  = { tipoViajeSel = if (tipoViajeSel == "ida") null else "ida" },
+                        label    = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.School, null, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Ida")
+                            }
+                        }
+                    )
+                    FilterChip(
+                        selected = tipoViajeSel == "vuelta",
+                        onClick  = { tipoViajeSel = if (tipoViajeSel == "vuelta") null else "vuelta" },
+                        label    = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Home, null, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Vuelta")
+                            }
+                        }
+                    )
+                }
+
                 HorizontalDivider()
 
                 Column(
@@ -117,23 +179,39 @@ fun HomeScreen(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text("Hola, ${sesion?.nombre ?: "usuario"} 👋",
+                    Text(
+                        "Hola, ${sesion?.nombre ?: "usuario"} 👋",
                         style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold)
+                        fontWeight = FontWeight.Bold
+                    )
 
-                    if (fechaSel != null) {
-                        Card(shape = RoundedCornerShape(10.dp),
+                    // ── Banner de filtros activos ─────────────────────────
+                    if (fechaSel != null || tipoViajeSel != null) {
+                        Card(
+                            shape  = RoundedCornerShape(10.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-                            Row(modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically) {
+                                containerColor = MaterialTheme.colorScheme.primaryContainer)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Icon(Icons.Filled.FilterAlt, null,
                                     tint = MaterialTheme.colorScheme.primary)
                                 Spacer(Modifier.width(8.dp))
-                                Text("Mostrando viajes del $fechaSel",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.weight(1f))
-                                TextButton(onClick = { fechaSel = null }) { Text("Limpiar") }
+                                val desc = listOfNotNull(
+                                    fechaSel?.let { "fecha: $it" },
+                                    tipoViajeSel?.let { "tipo: $it" }
+                                ).joinToString(", ")
+                                Text(
+                                    "Filtros activos: $desc",
+                                    style    = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(onClick = {
+                                    fechaSel     = null
+                                    tipoViajeSel = null
+                                }) { Text("Limpiar") }
                             }
                         }
                     }
@@ -144,10 +222,11 @@ fun HomeScreen(
                             color = MaterialTheme.colorScheme.primary)
                         (sedes ?: emptyList()).forEach { sede ->
                             Card(
-                                onClick   = {
-                                    val ruta = if (fechaSel != null)
-                                        "viajes_por_sede/${sede.idSede}?fecha=$fechaSel"
-                                    else "viajes_por_sede/${sede.idSede}"
+                                onClick = {
+                                    val ruta = buildString {
+                                        append("viajes_por_sede/${sede.idSede}")
+                                        if (fechaSel != null) append("?fecha=$fechaSel")
+                                    }
                                     navController.navigate(ruta)
                                 },
                                 modifier  = Modifier.fillMaxWidth(),
@@ -160,54 +239,9 @@ fun HomeScreen(
                                         tint = MaterialTheme.colorScheme.primary)
                                     Spacer(Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(sede.nombreSede, fontWeight = FontWeight.SemiBold)
-                                        Text(sede.ciudad, style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                                    }
-                                    Icon(Icons.Filled.ChevronRight, null,
-                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
-                                }
-                            }
-                        }
-                    }
-
-                    // ── Por conductor ────────────────────────────────────
-                    if ((conductores ?: emptyList()).isNotEmpty()) {
-                        Text("Por conductor", fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary)
-                        (conductores ?: emptyList()).forEach { conductor ->
-                            Card(
-                                onClick   = {
-                                    val ruta = if (fechaSel != null)
-                                        "viajes_por_conductor/${conductor.idUsuario}?fecha=$fechaSel"
-                                    else "viajes_por_conductor/${conductor.idUsuario}"
-                                    navController.navigate(ruta)
-                                },
-                                modifier  = Modifier.fillMaxWidth(),
-                                shape     = RoundedCornerShape(12.dp),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                            ) {
-                                Row(modifier = Modifier.padding(14.dp),
-                                    verticalAlignment = Alignment.CenterVertically) {
-                                    if (!conductor.fotoPerfil.isNullOrBlank()) {
-                                        AsyncImage(model = conductor.fotoPerfil, null,
-                                            modifier = Modifier.size(40.dp).clip(CircleShape),
-                                            contentScale = ContentScale.Crop)
-                                    } else {
-                                        Box(modifier = Modifier.size(40.dp).clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.primaryContainer),
-                                            contentAlignment = Alignment.Center) {
-                                            Text(conductor.nombre.firstOrNull()
-                                                ?.uppercaseChar()?.toString() ?: "?",
-                                                fontSize   = 16.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color      = MaterialTheme.colorScheme.primary)
-                                        }
-                                    }
-                                    Spacer(Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(conductor.nombre, fontWeight = FontWeight.SemiBold)
-                                        Text(conductor.correo,
+                                        Text(sede.nombreSede,
+                                            fontWeight = FontWeight.SemiBold)
+                                        Text(sede.ciudad,
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                                     }
@@ -218,24 +252,159 @@ fun HomeScreen(
                         }
                     }
 
-                    // ── Viajes disponibles ───────────────────────────────
-                    HorizontalDivider()
-                    Text(if (fechaSel != null) "Viajes del $fechaSel" else "Viajes disponibles",
-                        fontWeight = FontWeight.Bold,
+                    // ── Por conductor ─────────────────────────────────────
+                    Text("Por conductor", fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary)
+                    Card(
+                        onClick   = { navController.navigate("lista_conductores") },
+                        modifier  = Modifier.fillMaxWidth(),
+                        shape     = RoundedCornerShape(12.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Row(modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Filled.People, null,
+                                    tint     = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(22.dp))
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Buscar por conductor",
+                                    fontWeight = FontWeight.SemiBold)
+                                Text("Ver todos los conductores disponibles",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            }
+                            Icon(Icons.Filled.ChevronRight, null,
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                        }
+                    }
+
+                    // ── Por ciudad de origen ──────────────────────────────
+                    if (ciudadesOrigen.isNotEmpty()) {
+                        Text("Por ciudad de origen", fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary)
+                        ciudadesOrigen.take(5).forEach { ciudad ->
+                            Card(
+                                onClick = {
+                                    val ruta = buildString {
+                                        append("viajes_por_ciudad/$ciudad")
+                                        if (fechaSel != null) append("?fecha=$fechaSel")
+                                    }
+                                    navController.navigate(ruta)
+                                },
+                                modifier  = Modifier.fillMaxWidth(),
+                                shape     = RoundedCornerShape(12.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            ) {
+                                Row(modifier = Modifier.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.TripOrigin, null,
+                                        tint = MaterialTheme.colorScheme.primary)
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(ciudad, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            "${viajesDisponibles.count { it.origen.equals(ciudad, ignoreCase = true) }} viaje(s) disponible(s)",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                    Icon(Icons.Filled.ChevronRight, null,
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                                }
+                            }
+                        }
+                        if (ciudadesOrigen.size > 5) {
+                            TextButton(
+                                onClick  = { navController.navigate("viajes") },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Ver ${ciudadesOrigen.size - 5} ciudades más") }
+                        }
+                    }
+
+                    // ── Por ciudad de destino ─────────────────────────────
+                    if (ciudadesDestino.isNotEmpty()) {
+                        Text("Por ciudad de destino", fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary)
+                        ciudadesDestino.take(5).forEach { ciudad ->
+                            Card(
+                                onClick = {
+                                    val ruta = buildString {
+                                        append("viajes_por_destino/$ciudad")
+                                        if (fechaSel != null) append("?fecha=$fechaSel")
+                                    }
+                                    navController.navigate(ruta)
+                                },
+                                modifier  = Modifier.fillMaxWidth(),
+                                shape     = RoundedCornerShape(12.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            ) {
+                                Row(modifier = Modifier.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Place, null,
+                                        tint = MaterialTheme.colorScheme.tertiary)
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(ciudad, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            "${viajesDisponibles.count { it.destino.equals(ciudad, ignoreCase = true) }} viaje(s) disponible(s)",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                    Icon(Icons.Filled.ChevronRight, null,
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                                }
+                            }
+                        }
+                        if (ciudadesDestino.size > 5) {
+                            TextButton(
+                                onClick  = { navController.navigate("viajes") },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Ver ${ciudadesDestino.size - 5} ciudades más") }
+                        }
+                    }
+
+                    // ── Viajes disponibles ────────────────────────────────
+                    HorizontalDivider()
+                    Text(
+                        when {
+                            fechaSel != null && tipoViajeSel != null ->
+                                "Viajes de $tipoViajeSel del $fechaSel"
+                            fechaSel != null     -> "Viajes del $fechaSel"
+                            tipoViajeSel != null -> "Viajes de $tipoViajeSel"
+                            else                 -> "Viajes disponibles"
+                        },
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
 
                     if (viajesMostrados.isEmpty() && !cargando) {
-                        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-                            Box(modifier = Modifier.fillMaxWidth().padding(24.dp),
-                                contentAlignment = Alignment.Center) {
+                        Card(modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)) {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Icon(Icons.Filled.SearchOff, null,
-                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                        tint     = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                                         modifier = Modifier.size(36.dp))
                                     Spacer(Modifier.height(6.dp))
-                                    Text(if (fechaSel != null) "No hay viajes para esa fecha"
-                                    else "No hay viajes disponibles",
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                                    Text(
+                                        if (fechaSel != null || tipoViajeSel != null)
+                                            "No hay viajes con esos filtros"
+                                        else "No hay viajes disponibles",
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    )
                                     Text("Desliza hacia abajo para recargar",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
@@ -243,7 +412,6 @@ fun HomeScreen(
                             }
                         }
                     } else {
-                        // Usar ViajeMiniCard con reservasCount del mapa
                         viajesMostrados.take(10).forEach { v ->
                             ViajeMiniCard(
                                 v             = v,
@@ -254,7 +422,8 @@ fun HomeScreen(
                         if (viajesMostrados.size > 10) {
                             TextButton(
                                 onClick  = {
-                                    val ruta = if (fechaSel != null) "viajes?fecha=$fechaSel" else "viajes"
+                                    val ruta = if (fechaSel != null)
+                                        "viajes?fecha=$fechaSel" else "viajes"
                                     navController.navigate(ruta)
                                 },
                                 modifier = Modifier.fillMaxWidth()

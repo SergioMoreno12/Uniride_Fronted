@@ -18,6 +18,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.uniride.ViewModel.AuthViewModel
 import com.example.uniride.interfaces.RetrofitClient
+import com.example.uniride.model.dto.ReporteRequest
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,7 +36,6 @@ fun CrearReporteScreen(
     var cargando    by remember { mutableStateOf(false) }
     var error       by remember { mutableStateOf<String?>(null) }
 
-    // Tipos de reporte predefinidos para facilitar al usuario
     val tiposReporte = listOf(
         "Conductor no se presentó",
         "Comportamiento inapropiado",
@@ -68,11 +68,11 @@ fun CrearReporteScreen(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Mensaje informativo
+            // ── Mensaje informativo ──────────────────────────────────
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(
+                shape    = RoundedCornerShape(12.dp),
+                colors   = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
             ) {
                 Row(modifier = Modifier.padding(14.dp),
@@ -90,7 +90,7 @@ fun CrearReporteScreen(
                 }
             }
 
-            // Tipo de reporte (accesos rápidos)
+            // ── Tipo de problema ─────────────────────────────────────
             Text("Tipo de problema", fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -101,7 +101,9 @@ fun CrearReporteScreen(
                             tipoSeleccionado = tipo
                             if (tipo != "Otro") titulo = tipo
                         },
-                        label    = { Text(tipo, style = MaterialTheme.typography.bodySmall) },
+                        label    = {
+                            Text(tipo, style = MaterialTheme.typography.bodySmall)
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -109,80 +111,106 @@ fun CrearReporteScreen(
 
             HorizontalDivider()
 
-            // Título personalizado
+            // ── Título ───────────────────────────────────────────────
             Text("Título del reporte", fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary)
             TextField(
-                value = titulo,
+                value         = titulo,
                 onValueChange = { titulo = it },
-                label = { Text("Título") },
-                leadingIcon = { Icon(Icons.Filled.Report, null) },
-                placeholder = { Text("Ej: El conductor no llegó al punto acordado") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                isError = titulo.isBlank() && cargando
+                label         = { Text("Título") },
+                leadingIcon   = { Icon(Icons.Filled.Report, null) },
+                placeholder   = { Text("Ej: El conductor no llegó al punto acordado") },
+                singleLine    = true,
+                modifier      = Modifier.fillMaxWidth(),
+                shape         = RoundedCornerShape(12.dp),
+                isError       = titulo.isBlank() && cargando
             )
 
-            // Descripción detallada
+            // ── Descripción ──────────────────────────────────────────
             Text("Descripción detallada", fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary)
             TextField(
-                value = descripcion,
+                value         = descripcion,
                 onValueChange = { descripcion = it },
-                label = { Text("Describe lo que ocurrió") },
-                leadingIcon = { Icon(Icons.Filled.Description, null) },
-                placeholder = { Text("Proporciona todos los detalles relevantes: fecha, hora, nombres involucrados...") },
-                maxLines = 6,
-                modifier = Modifier
+                label         = { Text("Describe lo que ocurrió") },
+                leadingIcon   = { Icon(Icons.Filled.Description, null) },
+                placeholder   = { Text("Proporciona todos los detalles relevantes: fecha, hora, nombres involucrados...") },
+                maxLines      = 6,
+                modifier      = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 120.dp),
-                shape = RoundedCornerShape(12.dp),
-                isError = descripcion.isBlank() && cargando
+                shape         = RoundedCornerShape(12.dp),
+                isError       = descripcion.isBlank() && cargando
             )
 
-            // Error
+            // ── Error ────────────────────────────────────────────────
             error?.let {
                 Card(
-                    shape = RoundedCornerShape(10.dp),
+                    shape  = RoundedCornerShape(10.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer)
                 ) {
                     Row(modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.Error, null,
-                            tint = MaterialTheme.colorScheme.error,
+                            tint     = MaterialTheme.colorScheme.error,
                             modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text(it, color = MaterialTheme.colorScheme.error,
+                        Text(it,
+                            color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
 
-            // Botón enviar
+            // ── Botón enviar ─────────────────────────────────────────
             Button(
                 onClick = {
                     error = null
-                    if (titulo.isBlank()) { error = "Ingresa un título para el reporte"; return@Button }
-                    if (descripcion.isBlank()) { error = "Describe el problema con más detalle"; return@Button }
-
+                    if (titulo.isBlank()) {
+                        error = "Ingresa un título para el reporte"
+                        return@Button
+                    }
+                    if (descripcion.isBlank()) {
+                        error = "Describe el problema con más detalle"
+                        return@Button
+                    }
+                    val idPasajero = sesion?.idUsuario
+                    if (idPasajero == null) {
+                        error = "Sesión no válida. Vuelve a iniciar sesión."
+                        return@Button
+                    }
                     cargando = true
                     scope.launch {
                         try {
-                            RetrofitClient.apiService.crearReporte(
-                                mapOf(
-                                    "titulo"      to titulo,
-                                    "descripcion" to descripcion,
-                                    "idUsuario"   to (sesion?.idUsuario ?: 0L)
+                            val response = RetrofitClient.apiService.crearReporte(
+                                ReporteRequest(
+                                    titulo      = titulo.trim(),
+                                    descripcion = descripcion.trim(),
+                                    idUsuario   = idPasajero
                                 )
                             )
-                            Toast.makeText(context,
-                                "✅ Reporte enviado con éxito. Lo revisaremos pronto.",
-                                Toast.LENGTH_LONG).show()
+                            response.body()?.close()
+
+                            if (!response.isSuccessful) {
+                                error = when (response.code()) {
+                                    400  -> "Datos inválidos. Revisa el formulario."
+                                    401  -> "Sesión expirada. Vuelve a iniciar sesión."
+                                    else -> "Error del servidor (${response.code()}). Intenta de nuevo."
+                                }
+                                cargando = false
+                                return@launch
+                            }
+
+                            Toast.makeText(
+                                context,
+                                "✓ Reporte enviado con éxito. Lo revisaremos pronto.",
+                                Toast.LENGTH_LONG
+                            ).show()
                             navController.popBackStack()
+
                         } catch (e: Exception) {
-                            error = "Error al enviar el reporte. Intenta de nuevo."
+                            error = "Error de conexión. Verifica tu internet e intenta de nuevo."
                         }
                         cargando = false
                     }
@@ -192,7 +220,9 @@ fun CrearReporteScreen(
                 shape    = RoundedCornerShape(12.dp)
             ) {
                 if (cargando) {
-                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(
+                        modifier    = Modifier.size(22.dp),
+                        strokeWidth = 2.dp)
                 } else {
                     Icon(Icons.Filled.Send, null)
                     Spacer(Modifier.width(8.dp))
@@ -200,13 +230,11 @@ fun CrearReporteScreen(
                 }
             }
 
-            // Nota sobre privacidad
             Text(
                 "Tu reporte es confidencial y será atendido por el equipo de administración.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
             )
-
             Spacer(Modifier.height(16.dp))
         }
     }

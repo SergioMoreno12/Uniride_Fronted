@@ -2,6 +2,8 @@ package com.example.uniride.Service
 
 import com.example.uniride.Repository.AdminRepository
 import com.example.uniride.model.*
+import okhttp3.ResponseBody
+import retrofit2.Response
 
 class AdminService {
     private val repository = AdminRepository()
@@ -16,7 +18,7 @@ class AdminService {
     suspend fun obtenerViajes(): List<Viaje> = repository.obtenerViajes()
     suspend fun eliminarViaje(id: Long) = repository.eliminarViaje(id)
 
-    // Vehiculos
+    // Vehículos
     suspend fun obtenerVehiculos(): List<Vehiculo> = repository.obtenerVehiculos()
     suspend fun eliminarVehiculo(id: Long) = repository.eliminarVehiculo(id)
 
@@ -30,7 +32,9 @@ class AdminService {
 
     // Reportes
     suspend fun obtenerReportes(): List<Reporte> = repository.obtenerReportes()
-    suspend fun actualizarEstadoReporte(id: Long, estado: String): Reporte =
+
+    // FIX: tipo de retorno actualizado a Response<ResponseBody>
+    suspend fun actualizarEstadoReporte(id: Long, estado: String): Response<ResponseBody> =
         repository.actualizarEstadoReporte(id, estado)
 
     // Notificaciones

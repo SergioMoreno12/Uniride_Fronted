@@ -10,6 +10,8 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.*
 import java.util.concurrent.TimeUnit
+import com.example.uniride.model.dto.CalificacionRequest
+import com.example.uniride.model.dto.ReporteRequest
 
 interface ApiService {
 
@@ -102,6 +104,8 @@ interface ApiService {
     @GET("/api/viajes/ciudad/{ciudad}")
     suspend fun viajesPorCiudad(@Path("ciudad") ciudad: String): List<Viaje>
 
+    @GET("/api/viajes/destino/{ciudad}")                          // ← NUEVO
+    suspend fun viajesPorDestino(@Path("ciudad") ciudad: String): List<Viaje>
     @POST("/api/viajes")
     suspend fun crearViaje(@Body dto: ViajeDTO): Viaje
 
@@ -150,13 +154,13 @@ interface ApiService {
     suspend fun reportesPorUsuario(@Path("idUsuario") id: Long): List<Reporte>
 
     @POST("/api/reportes")
-    suspend fun crearReporte(@Body body: Map<String, Any>): Reporte
+    suspend fun crearReporte(@Body body: ReporteRequest): Response<ResponseBody>
 
     @PUT("/api/reportes/{id}")
     suspend fun actualizarReporte(
         @Path("id") id: Long,
         @Body body: Map<String, String>
-    ): Reporte
+    ): Response<ResponseBody>
 
     // ── Notificaciones ────────────────────────────────────────────────
     @GET("/api/notificaciones")
@@ -175,7 +179,7 @@ interface ApiService {
     suspend fun eliminarNotificacion(@Path("id") id: Long)
 
     @POST("/api/calificaciones")
-    suspend fun calificarConductor(@Body body: Map<String, Any>): Response<ResponseBody>
+    suspend fun calificarConductor(@Body body: CalificacionRequest): Response<ResponseBody>
 
     @GET("/api/calificaciones/conductor/{idConductor}")
     suspend fun calificacionesConductor(@Path("idConductor") id: Long): List<Calificacion>

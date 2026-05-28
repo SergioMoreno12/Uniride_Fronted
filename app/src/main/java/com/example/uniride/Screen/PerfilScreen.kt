@@ -301,6 +301,34 @@ fun PerfilScreen(
                         Spacer(Modifier.width(8.dp))
                         Text("Mi vehículo", fontWeight = FontWeight.Bold)
                     }
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick  = { navController.navigate(Routes.MIS_CALIFICACIONES) },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape    = RoundedCornerShape(12.dp),
+                        colors   = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.tertiary
+                        )
+                    ) {
+                        Icon(Icons.Filled.Star, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Mis calificaciones", fontWeight = FontWeight.Bold)
+                        if (promedio > 0) {
+                            Spacer(Modifier.width(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    "★ ${"%.1f".format(promedio)}",
+                                    modifier   = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    style      = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color      = MaterialTheme.colorScheme.tertiary
+                                )
+                            }
+                        }
+                    }
                 }
 
                 // NUEVO: Botón para reportar un problema (solo pasajero y conductor)

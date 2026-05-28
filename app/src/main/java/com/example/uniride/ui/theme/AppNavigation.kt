@@ -38,7 +38,7 @@ object Routes {
     const val CALIFICAR             = "calificar/{idReserva}/{idConductor}"
     const val CONDUCTOR_PERFIL      = "conductor_perfil/{idConductor}"
     const val VIAJES_POR_SEDE       = "viajes_por_sede/{idSede}?fecha={fecha}"
-    const val VIAJES_POR_CIUDAD     = "viajes_por_ciudad/{ciudad}?fecha={fecha}"
+    const val VIAJES_POR_DESTINO    = "viajes_por_destino/{ciudad}?fecha={fecha}"
     const val VIAJES_POR_CONDUCTOR  = "viajes_por_conductor/{idConductor}?fecha={fecha}"
     const val ADMIN                 = "admin"
     const val ADMIN_USUARIOS        = "admin_usuarios"
@@ -53,6 +53,7 @@ object Routes {
     const val LISTA_CONDUCTORES     = "lista_conductores"
     const val CREAR_REPORTE         = "crear_reporte"
     const val PASAJERO_PERFIL = "pasajero_perfil/{idPasajero}"
+    const val MIS_CALIFICACIONES   = "mis_calificaciones"
 }
 
 @Composable
@@ -197,6 +198,7 @@ fun AppNavigation() {
                 back.arguments?.getString("fecha"))
         }
 
+        // Búsqueda por ciudad de ORIGEN
         composable(
             "viajes_por_ciudad/{ciudad}?fecha={fecha}",
             arguments = listOf(
@@ -205,9 +207,33 @@ fun AppNavigation() {
             )
         ) { back ->
             ViajesPorCiudadScreen(
-                back.arguments?.getString("ciudad") ?: "",
-                navController, authViewModel, viajeViewModel, reservaViewModel,
-                back.arguments?.getString("fecha"))
+                ciudad        = back.arguments?.getString("ciudad") ?: "",
+                tipo          = "origen",
+                navController = navController,
+                authViewModel = authViewModel,
+                viajeViewModel = viajeViewModel,
+                reservaViewModel = reservaViewModel,
+                fechaFiltro   = back.arguments?.getString("fecha")
+            )
+        }
+
+        // Búsqueda por ciudad de DESTINO
+        composable(
+            "viajes_por_destino/{ciudad}?fecha={fecha}",
+            arguments = listOf(
+                navArgument("ciudad") { type = NavType.StringType },
+                navArgument("fecha")  { type = NavType.StringType; nullable = true; defaultValue = null }
+            )
+        ) { back ->
+            ViajesPorCiudadScreen(
+                ciudad        = back.arguments?.getString("ciudad") ?: "",
+                tipo          = "destino",
+                navController = navController,
+                authViewModel = authViewModel,
+                viajeViewModel = viajeViewModel,
+                reservaViewModel = reservaViewModel,
+                fechaFiltro   = back.arguments?.getString("fecha")
+            )
         }
 
         composable(
@@ -247,6 +273,10 @@ fun AppNavigation() {
 
         composable("crear_reporte") {
             CrearReporteScreen(navController, authViewModel)
+        }
+
+        composable("mis_calificaciones") {
+            MisCalificacionesScreen(navController, authViewModel)
         }
 
         composable("pasajero_perfil/{idPasajero}") { back ->
